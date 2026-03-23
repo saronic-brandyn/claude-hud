@@ -21,6 +21,17 @@ export interface StdinData {
     used_percentage?: number | null;
     remaining_percentage?: number | null;
   };
+  // Native rate limits (Claude Code v2.1.80+)
+  rate_limits?: {
+    five_hour?: {
+      used_percentage?: number;
+      resets_at?: string;
+    };
+    seven_day?: {
+      used_percentage?: number;
+      resets_at?: string;
+    };
+  };
 }
 
 export interface ToolEntry {

@@ -13,7 +13,12 @@ export function renderUsageLine(ctx: RenderContext): string | null {
     return null;
   }
 
-  if (!ctx.usageData?.planName) {
+  if (!ctx.usageData) {
+    return null;
+  }
+
+  // Skip if no rate data (planName may be null with native rate_limits)
+  if (ctx.usageData.fiveHour === null && ctx.usageData.sevenDay === null && !ctx.usageData.apiUnavailable) {
     return null;
   }
 

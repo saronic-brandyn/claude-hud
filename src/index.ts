@@ -11,7 +11,7 @@ import { calculateCost } from './pricing.js';
 import type { CumulativeTokenUsage } from './pricing.js';
 import { detectCompaction } from './compaction-detector.js';
 import { getContextPercent, getBufferedPercent } from './stdin.js';
-import type { RenderContext } from './types.js';
+import type { RenderContext, StdinData, UsageData } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 
@@ -28,6 +28,27 @@ export type MainDeps = {
   now: () => number;
   log: (...args: unknown[]) => void;
 };
+
+
+function parseNativeRateLimits(stdin: StdinData): UsageData | null {
+  const rl = stdin.rate_limits;
+  if (!rl?.five_hour && !rl?.seven_day) return null;
+
+  const fiveHour = typeof rl.five_hour?.used_percentage === 'number'
+    ? Math.round(Math.max(0, Math.min(100, rl.five_hour.used_percentage)))
+    : null;
+  const sevenDay = typeof rl.seven_day?.used_percentage === 'number'
+    ? Math.round(Math.max(0, Math.min(100, rl.seven_day.used_percentage)))
+    : null;
+
+  const fiveHourResetAt = rl.five_hour?.resets_at ? new Date(rl.five_hour.resets_at) : null;
+  const sevenDayResetAt = rl.seven_day?.resets_at ? new Date(rl.seven_day.resets_at) : null;
+
+  if (fiveHourResetAt && isNaN(fiveHourResetAt.getTime())) return null;
+  if (sevenDayResetAt && isNaN(sevenDayResetAt.getTime())) return null;
+
+  return { planName: null, fiveHour, sevenDay, fiveHourResetAt, sevenDayResetAt };
+}
 
 export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
   const deps: MainDeps = {
@@ -69,12 +90,12 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
         ? deps.getGitStatus(stdin.cwd)
         : Promise.resolve(null),
       config.display.showUsage !== false
-        ? deps.getUsage({
+        ? (parseNativeRateLimits(stdin) ?? deps.getUsage({
             ttls: {
               cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
               failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
             },
-          })
+          }))
         : Promise.resolve(null),
     ]);
 
