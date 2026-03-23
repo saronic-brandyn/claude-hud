@@ -8,6 +8,15 @@ export function renderEnvironmentLine(ctx: RenderContext): string | null {
     return null;
   }
 
+  // Auto-hide counts after configured duration (default 30s, 0 = never hide)
+  const hideAfter = display?.countsHideAfterSeconds ?? 30;
+  if (hideAfter > 0 && ctx.transcript.sessionStart) {
+    const age = Date.now() - ctx.transcript.sessionStart.getTime();
+    if (age > hideAfter * 1000) {
+      return null;
+    }
+  }
+
   const totalCounts = ctx.claudeMdCount + ctx.rulesCount + ctx.mcpCount + ctx.hooksCount;
   const threshold = display?.environmentThreshold ?? 0;
 

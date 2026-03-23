@@ -7,6 +7,8 @@ import { getUsage } from './usage-api.js';
 import { loadConfig } from './config.js';
 import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
 import { getContextVelocity } from './context-velocity.js';
+import { detectCompaction } from './compaction-detector.js';
+import { getContextPercent, getBufferedPercent } from './stdin.js';
 import type { RenderContext } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';

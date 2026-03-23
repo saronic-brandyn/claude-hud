@@ -71,6 +71,7 @@ export interface HudConfig {
     usageThreshold: number;
     sevenDayThreshold: number;
     environmentThreshold: number;
+    countsHideAfterSeconds: number;
     customLine: string;
   };
   usage: {
@@ -111,6 +112,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     usageThreshold: 0,
     sevenDayThreshold: 80,
     environmentThreshold: 0,
+    countsHideAfterSeconds: 30,
     customLine: '',
   },
   usage: {
@@ -315,6 +317,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     usageThreshold: validateThreshold(migrated.display?.usageThreshold, 100),
     sevenDayThreshold: validateThreshold(migrated.display?.sevenDayThreshold, 100),
     environmentThreshold: validateThreshold(migrated.display?.environmentThreshold, 100),
+    countsHideAfterSeconds: typeof migrated.display?.countsHideAfterSeconds === 'number' && migrated.display.countsHideAfterSeconds >= 0
+      ? migrated.display.countsHideAfterSeconds
+      : DEFAULT_CONFIG.display.countsHideAfterSeconds,
     customLine: typeof migrated.display?.customLine === 'string'
       ? migrated.display.customLine.slice(0, 80)
       : DEFAULT_CONFIG.display.customLine,

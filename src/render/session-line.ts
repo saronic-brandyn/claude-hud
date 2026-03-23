@@ -130,8 +130,12 @@ export function renderSessionLine(ctx: RenderContext): string {
     parts.push(dim(ctx.transcript.sessionName));
   }
 
-  // Config counts (respects environmentThreshold)
-  if (display?.showConfigCounts !== false) {
+  // Config counts (respects environmentThreshold, auto-hides after countsHideAfterSeconds)
+  const hideAfter = display?.countsHideAfterSeconds ?? 30;
+  const countsExpired = hideAfter > 0 && ctx.transcript.sessionStart
+    && (Date.now() - ctx.transcript.sessionStart.getTime() > hideAfter * 1000);
+
+  if (display?.showConfigCounts !== false && !countsExpired) {
     const totalCounts = ctx.claudeMdCount + ctx.rulesCount + ctx.mcpCount + ctx.hooksCount;
     const envThreshold = display?.environmentThreshold ?? 0;
 
