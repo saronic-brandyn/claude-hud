@@ -15,7 +15,24 @@ function getCostColor(cost: number): string {
   return '\x1b[2m';                     // dim
 }
 
-/** Expanded layout: "Cost ~$1.42" with optional token breakdown */
+function parseDurationMinutes(duration: string): number | null {
+  if (!duration || duration === '<1m') return null;
+  const hourMatch = duration.match(/(\d+)h/);
+  const minMatch = duration.match(/(\d+)m/);
+  const hours = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+  const mins = minMatch ? parseInt(minMatch[1], 10) : 0;
+  const total = hours * 60 + mins;
+  return total > 0 ? total : null;
+}
+
+function getBurnRate(cost: number, duration: string): string | null {
+  const mins = parseDurationMinutes(duration);
+  if (!mins || mins < 1 || cost <= 0) return null;
+  const perHour = cost / (mins / 60);
+  return formatCost(perHour);
+}
+
+/** Expanded layout: "Cost ~$1.42 ($0.85/hr)" with optional token breakdown */
 export function renderCostLine(ctx: RenderContext): string | null {
   const data = ctx.costData;
   if (!data) return null;
@@ -25,7 +42,9 @@ export function renderCostLine(ctx: RenderContext): string | null {
 
   const color = getCostColor(data.totalCost);
   const costStr = formatCost(data.totalCost);
-  let result = `${dim('Cost')} ${color}~${costStr}${RESET}`;
+  const burn = getBurnRate(data.totalCost, ctx.sessionDuration);
+  const burnStr = burn ? ` ${dim(`(${burn}/hr)`)}` : '';
+  let result = `${dim('Cost')} ${color}~${costStr}${RESET}${burnStr}`;
 
   if (ctx.config?.display?.showCostBreakdown) {
     const inStr = formatTokens(data.inputTokens + data.cacheWriteTokens + data.cacheReadTokens);
@@ -36,7 +55,7 @@ export function renderCostLine(ctx: RenderContext): string | null {
   return result;
 }
 
-/** Compact layout: "~$1.42" inline segment */
+/** Compact layout: "~$1.42 $0.85/hr" inline segment */
 export function renderCostSegment(ctx: RenderContext): string | null {
   const data = ctx.costData;
   if (!data) return null;
@@ -45,5 +64,7 @@ export function renderCostSegment(ctx: RenderContext): string | null {
   if (total === 0) return null;
 
   const color = getCostColor(data.totalCost);
-  return `${color}~${formatCost(data.totalCost)}${RESET}`;
+  const burn = getBurnRate(data.totalCost, ctx.sessionDuration);
+  const burnStr = burn ? dim(` ${burn}/hr`) : '';
+  return `${color}~${formatCost(data.totalCost)}${RESET}${burnStr}`;
 }
