@@ -19,7 +19,9 @@ export function renderToolsLine(ctx: RenderContext): string | null {
 
   for (const tool of runningTools.slice(-2)) {
     const target = tool.target ? truncatePath(tool.target) : '';
-    parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}`);
+    const elapsed = Date.now() - tool.startTime.getTime();
+    const elapsedStr = elapsed > 5000 ? ` ${dim(`(${formatElapsed(elapsed)})`)}` : '';
+    parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}${elapsedStr}`);
   }
 
   const toolCounts = new Map<string, number>();
@@ -41,6 +43,15 @@ export function renderToolsLine(ctx: RenderContext): string | null {
   }
 
   return parts.join(' | ');
+}
+
+function formatElapsed(ms: number): string {
+  if (ms < 1000) return '<1s';
+  const secs = Math.round(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const remSecs = secs % 60;
+  return `${mins}m ${remSecs}s`;
 }
 
 function truncatePath(path: string, maxLen: number = 20): string {
