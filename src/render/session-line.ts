@@ -131,10 +131,10 @@ export function renderSessionLine(ctx: RenderContext): string {
     parts.push(gitPart);
   }
 
-  // Lines changed
-  if ((display?.showLinesChanged ?? true) && ctx.gitStatus) {
-    const la = ctx.gitStatus.linesAdded;
-    const lr = ctx.gitStatus.linesRemoved;
+  // Lines changed (from native stdin cost data)
+  if ((display?.showLinesChanged ?? true) && ctx.stdin.cost) {
+    const la = ctx.stdin.cost.total_lines_added;
+    const lr = ctx.stdin.cost.total_lines_removed;
     if (la || lr) {
       const lParts: string[] = [];
       if (la) lParts.push(green(`+${la}`));

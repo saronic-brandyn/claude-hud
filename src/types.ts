@@ -1,28 +1,43 @@
 import type { HudConfig } from './config.js';
-import type { CumulativeTokenUsage } from './pricing.js';
 import type { CompactionEvent } from './compaction-detector.js';
 import type { GitStatus } from './git.js';
 
 export interface StdinData {
+  session_id?: string;
   transcript_path?: string;
   cwd?: string;
   model?: {
     id?: string;
     display_name?: string;
   };
+  workspace?: {
+    current_dir?: string;
+    project_dir?: string;
+  };
+  version?: string;
+  output_style?: {
+    name?: string;
+  };
+  cost?: {
+    total_cost_usd?: number;
+    total_duration_ms?: number;
+    total_api_duration_ms?: number;
+    total_lines_added?: number;
+    total_lines_removed?: number;
+  };
   context_window?: {
     context_window_size?: number;
+    total_input_tokens?: number;
+    total_output_tokens?: number;
     current_usage?: {
       input_tokens?: number;
       output_tokens?: number;
       cache_creation_input_tokens?: number;
       cache_read_input_tokens?: number;
     } | null;
-    // Native percentage fields (Claude Code v2.1.6+)
     used_percentage?: number | null;
     remaining_percentage?: number | null;
   };
-  // Native rate limits (Claude Code v2.1.80+)
   rate_limits?: {
     five_hour?: {
       used_percentage?: number;
@@ -102,5 +117,5 @@ export interface RenderContext {
   extraLabel: string | null;
   contextVelocity: number | null;
   compactionEvent: CompactionEvent | null;
-  costData: CumulativeTokenUsage | null;
+  costData: StdinData['cost'] | null;
 }

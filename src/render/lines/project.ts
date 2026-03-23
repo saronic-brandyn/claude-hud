@@ -81,9 +81,9 @@ export function renderProjectLine(ctx: RenderContext): string | null {
     parts.push(dim(ctx.extraLabel));
   }
 
-  if ((display?.showLinesChanged ?? true) && ctx.gitStatus) {
-    const la = ctx.gitStatus.linesAdded;
-    const lr = ctx.gitStatus.linesRemoved;
+  if ((display?.showLinesChanged ?? true) && ctx.stdin.cost) {
+    const la = ctx.stdin.cost.total_lines_added;
+    const lr = ctx.stdin.cost.total_lines_removed;
     if (la || lr) {
       const lParts: string[] = [];
       if (la) lParts.push(green(`+${la}`));

@@ -7,8 +7,6 @@ import { getUsage } from './usage-api.js';
 import { loadConfig } from './config.js';
 import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
 import { getContextVelocity } from './context-velocity.js';
-import { calculateCost } from './pricing.js';
-import type { CumulativeTokenUsage } from './pricing.js';
 import { detectCompaction } from './compaction-detector.js';
 import { getContextPercent, getBufferedPercent } from './stdin.js';
 import type { RenderContext, StdinData, UsageData } from './types.js';
@@ -114,31 +112,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       : getBufferedPercent(stdin);
     const compactionEvent = detectCompaction(percent);
 
-    // Compute cost estimation from stdin token data
-    let costData: CumulativeTokenUsage | null = null;
-    if (config.display.showCost !== false) {
-      const usage = stdin.context_window?.current_usage;
-      if (usage) {
-        const modelId = stdin.model?.id ?? stdin.model?.display_name ?? 'opus';
-        const tokens: CumulativeTokenUsage = {
-          inputTokens: usage.input_tokens ?? 0,
-          outputTokens: usage.output_tokens ?? 0,
-          cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
-          cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-          totalCost: 0,
-          byModel: [{
-            model: modelId,
-            inputTokens: usage.input_tokens ?? 0,
-            outputTokens: usage.output_tokens ?? 0,
-            cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
-            cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-          }],
-        };
-        const estimate = calculateCost(tokens);
-        tokens.totalCost = estimate.totalCost;
-        costData = tokens;
-      }
-    }
+    // Use native cost data from stdin (Claude Code provides exact cumulative cost)
+    const costData = (config.display.showCost !== false && stdin.cost) ? stdin.cost : null;
 
     const ctx: RenderContext = {
       stdin,

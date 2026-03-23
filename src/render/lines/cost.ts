@@ -32,39 +32,40 @@ function getBurnRate(cost: number, duration: string): string | null {
   return formatCost(perHour);
 }
 
-/** Expanded layout: "Cost ~$1.42 ($0.85/hr)" with optional token breakdown */
+/** Expanded layout: "Cost $1.42 ($0.85/hr)" with optional lines changed */
 export function renderCostLine(ctx: RenderContext): string | null {
   const data = ctx.costData;
-  if (!data) return null;
+  const cost = data?.total_cost_usd;
+  if (cost == null || cost <= 0) return null;
 
-  const total = data.inputTokens + data.outputTokens + data.cacheWriteTokens + data.cacheReadTokens;
-  if (total === 0) return null;
-
-  const color = getCostColor(data.totalCost);
-  const costStr = formatCost(data.totalCost);
-  const burn = getBurnRate(data.totalCost, ctx.sessionDuration);
+  const color = getCostColor(cost);
+  const costStr = formatCost(cost);
+  const burn = getBurnRate(cost, ctx.sessionDuration);
   const burnStr = burn ? ` ${dim(`(${burn}/hr)`)}` : '';
-  let result = `${dim('Cost')} ${color}~${costStr}${RESET}${burnStr}`;
+  let result = `${dim('Cost')} ${color}${costStr}${RESET}${burnStr}`;
 
   if (ctx.config?.display?.showCostBreakdown) {
-    const inStr = formatTokens(data.inputTokens + data.cacheWriteTokens + data.cacheReadTokens);
-    const outStr = formatTokens(data.outputTokens);
-    result += dim(` (in: ${inStr}, out: ${outStr})`);
+    const added = data?.total_lines_added;
+    const removed = data?.total_lines_removed;
+    if (added || removed) {
+      const parts: string[] = [];
+      if (added) parts.push(`+${added}`);
+      if (removed) parts.push(`-${removed}`);
+      result += dim(` (${parts.join(' ')})`);
+    }
   }
 
   return result;
 }
 
-/** Compact layout: "~$1.42 $0.85/hr" inline segment */
+/** Compact layout: "$1.42 $0.85/hr" inline segment */
 export function renderCostSegment(ctx: RenderContext): string | null {
   const data = ctx.costData;
-  if (!data) return null;
+  const cost = data?.total_cost_usd;
+  if (cost == null || cost <= 0) return null;
 
-  const total = data.inputTokens + data.outputTokens + data.cacheWriteTokens + data.cacheReadTokens;
-  if (total === 0) return null;
-
-  const color = getCostColor(data.totalCost);
-  const burn = getBurnRate(data.totalCost, ctx.sessionDuration);
+  const color = getCostColor(cost);
+  const burn = getBurnRate(cost, ctx.sessionDuration);
   const burnStr = burn ? dim(` ${burn}/hr`) : '';
-  return `${color}~${formatCost(data.totalCost)}${RESET}${burnStr}`;
+  return `${color}${formatCost(cost)}${RESET}${burnStr}`;
 }
