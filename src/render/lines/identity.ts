@@ -32,7 +32,7 @@ export function renderIdentityLine(ctx: RenderContext): string {
   let compactStr = '';
   if (ctx.compactionEvent) {
     if (ctx.compactionEvent.state === 'compacted') {
-      compactStr = ` ${warning(ascii ? '! Compacted' : '⚡ Compacted', colors)}`;
+      compactStr = ` ${warning(ascii ? `! -${ctx.compactionEvent.delta}%` : `⚡ -${ctx.compactionEvent.delta}%`, colors)}`;
     } else {
       compactStr = ` ${warning(ascii ? '! ~85%' : '⚠ ~85%', colors)}`;
     }
