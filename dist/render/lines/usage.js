@@ -1,29 +1,37 @@
 import { isLimitReached } from '../../types.js';
 import { getProviderLabel } from '../../stdin.js';
-import { critical, warning, dim, getQuotaColor, quotaBar, RESET } from '../colors.js';
+import { critical, warning, dim, quotaBar, quotaBarAscii } from '../colors.js';
 import { getAdaptiveBarWidth } from '../../utils/terminal.js';
+import { formatUsagePercent, formatUsageError, formatResetTime } from '../format-helpers.js';
 export function renderUsageLine(ctx) {
     const display = ctx.config?.display;
     const colors = ctx.config?.colors;
     if (display?.showUsage === false) {
         return null;
     }
-    if (!ctx.usageData?.planName) {
+    if (!ctx.usageData) {
+        return null;
+    }
+    // Skip if no rate data (planName may be null with native rate_limits)
+    if (ctx.usageData.fiveHour === null && ctx.usageData.sevenDay === null && !ctx.usageData.apiUnavailable) {
         return null;
     }
     if (getProviderLabel(ctx.stdin)) {
         return null;
     }
+    const ascii = display?.asciiMode ?? false;
+    const symWarning = ascii ? '!' : '⚠';
+    const quotaBarFn = ascii ? quotaBarAscii : quotaBar;
     const label = dim('Usage');
     if (ctx.usageData.apiUnavailable) {
         const errorHint = formatUsageError(ctx.usageData.apiError);
-        return `${label} ${warning(`⚠${errorHint}`, colors)}`;
+        return `${label} ${warning(`${symWarning}${errorHint}`, colors)}`;
     }
     if (isLimitReached(ctx.usageData)) {
         const resetTime = ctx.usageData.fiveHour === 100
             ? formatResetTime(ctx.usageData.fiveHourResetAt)
             : formatResetTime(ctx.usageData.sevenDayResetAt);
-        return `${label} ${critical(`⚠ Limit reached${resetTime ? ` (resets ${resetTime})` : ''}`, colors)}`;
+        return `${label} ${critical(`${symWarning} Limit reached${resetTime ? ` (resets ${resetTime})` : ''}`, colors)}`;
     }
     const threshold = display?.usageThreshold ?? 0;
     const fiveHour = ctx.usageData.fiveHour;
@@ -37,8 +45,8 @@ export function renderUsageLine(ctx) {
     const usageBarEnabled = display?.usageBarEnabled ?? true;
     const fiveHourPart = usageBarEnabled
         ? (fiveHourReset
-            ? `${quotaBar(fiveHour ?? 0, getAdaptiveBarWidth(), colors)} ${fiveHourDisplay} (resets in ${fiveHourReset})`
-            : `${quotaBar(fiveHour ?? 0, getAdaptiveBarWidth(), colors)} ${fiveHourDisplay}`)
+            ? `${quotaBarFn(fiveHour ?? 0, getAdaptiveBarWidth(), colors)} ${fiveHourDisplay} (resets in ${fiveHourReset})`
+            : `${quotaBarFn(fiveHour ?? 0, getAdaptiveBarWidth(), colors)} ${fiveHourDisplay}`)
         : (fiveHourReset
             ? `5h: ${fiveHourDisplay} (resets in ${fiveHourReset})`
             : `5h: ${fiveHourDisplay}`);
@@ -51,50 +59,13 @@ export function renderUsageLine(ctx) {
         const sevenDayReset = formatResetTime(ctx.usageData.sevenDayResetAt);
         const sevenDayPart = usageBarEnabled
             ? (sevenDayReset
-                ? `${quotaBar(sevenDay, getAdaptiveBarWidth(), colors)} ${sevenDayDisplay} (resets in ${sevenDayReset})`
-                : `${quotaBar(sevenDay, getAdaptiveBarWidth(), colors)} ${sevenDayDisplay}`)
+                ? `${quotaBarFn(sevenDay, getAdaptiveBarWidth(), colors)} ${sevenDayDisplay} (resets in ${sevenDayReset})`
+                : `${quotaBarFn(sevenDay, getAdaptiveBarWidth(), colors)} ${sevenDayDisplay}`)
             : (sevenDayReset
                 ? `7d: ${sevenDayDisplay} (resets in ${sevenDayReset})`
                 : `7d: ${sevenDayDisplay}`);
         return `${label} ${fiveHourPart} | ${sevenDayPart}${syncingSuffix}`;
     }
     return `${label} ${fiveHourPart}${syncingSuffix}`;
-}
-function formatUsagePercent(percent, colors) {
-    if (percent === null) {
-        return dim('--');
-    }
-    const color = getQuotaColor(percent, colors);
-    return `${color}${percent}%${RESET}`;
-}
-function formatUsageError(error) {
-    if (!error)
-        return '';
-    if (error === 'rate-limited')
-        return ' (syncing...)';
-    if (error.startsWith('http-'))
-        return ` (${error.slice(5)})`;
-    return ` (${error})`;
-}
-function formatResetTime(resetAt) {
-    if (!resetAt)
-        return '';
-    const now = new Date();
-    const diffMs = resetAt.getTime() - now.getTime();
-    if (diffMs <= 0)
-        return '';
-    const diffMins = Math.ceil(diffMs / 60000);
-    if (diffMins < 60)
-        return `${diffMins}m`;
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-    if (hours >= 24) {
-        const days = Math.floor(hours / 24);
-        const remHours = hours % 24;
-        if (remHours > 0)
-            return `${days}d ${remHours}h`;
-        return `${days}d`;
-    }
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 //# sourceMappingURL=usage.js.map
