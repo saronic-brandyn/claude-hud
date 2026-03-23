@@ -4,6 +4,14 @@ export function renderEnvironmentLine(ctx) {
     if (display?.showConfigCounts === false) {
         return null;
     }
+    // Auto-hide counts after configured duration (default 30s, 0 = never hide)
+    const hideAfter = display?.countsHideAfterSeconds ?? 30;
+    if (hideAfter > 0 && ctx.transcript.sessionStart) {
+        const age = Date.now() - ctx.transcript.sessionStart.getTime();
+        if (age > hideAfter * 1000) {
+            return null;
+        }
+    }
     const totalCounts = ctx.claudeMdCount + ctx.rulesCount + ctx.mcpCount + ctx.hooksCount;
     const threshold = display?.environmentThreshold ?? 0;
     if (totalCounts === 0 || totalCounts < threshold) {

@@ -4,12 +4,17 @@ export function renderToolsLine(ctx) {
     if (tools.length === 0) {
         return null;
     }
+    const ascii = ctx.config?.display?.asciiMode ?? false;
+    const symRunning = ascii ? '~' : '◐';
+    const symDone = ascii ? '+' : '✓';
     const parts = [];
     const runningTools = tools.filter((t) => t.status === 'running');
     const completedTools = tools.filter((t) => t.status === 'completed' || t.status === 'error');
     for (const tool of runningTools.slice(-2)) {
         const target = tool.target ? truncatePath(tool.target) : '';
-        parts.push(`${yellow('◐')} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}`);
+        const elapsed = Date.now() - tool.startTime.getTime();
+        const elapsedStr = elapsed > 5000 ? ` ${dim(`(${formatElapsed(elapsed)})`)}` : '';
+        parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}${elapsedStr}`);
     }
     const toolCounts = new Map();
     for (const tool of completedTools) {
@@ -20,12 +25,22 @@ export function renderToolsLine(ctx) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 4);
     for (const [name, count] of sortedTools) {
-        parts.push(`${green('✓')} ${name} ${dim(`×${count}`)}`);
+        parts.push(`${green(symDone)} ${name} ${dim(`×${count}`)}`);
     }
     if (parts.length === 0) {
         return null;
     }
     return parts.join(' | ');
+}
+function formatElapsed(ms) {
+    if (ms < 1000)
+        return '<1s';
+    const secs = Math.round(ms / 1000);
+    if (secs < 60)
+        return `${secs}s`;
+    const mins = Math.floor(secs / 60);
+    const remSecs = secs % 60;
+    return `${mins}m ${remSecs}s`;
 }
 function truncatePath(path, maxLen = 20) {
     // Normalize Windows backslashes to forward slashes for consistent display

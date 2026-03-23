@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
+const TAIL_THRESHOLD_BYTES = 512 * 1024;
+const TAIL_READ_BYTES = 128 * 1024;
 export async function parseTranscript(transcriptPath) {
     const result = {
         tools: [],
@@ -16,26 +18,70 @@ export async function parseTranscript(transcriptPath) {
     let latestSlug;
     let customTitle;
     try {
-        const fileStream = fs.createReadStream(transcriptPath);
-        const rl = readline.createInterface({
-            input: fileStream,
-            crlfDelay: Infinity,
-        });
-        for await (const line of rl) {
-            if (!line.trim())
-                continue;
-            try {
-                const entry = JSON.parse(line);
-                if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
-                    customTitle = entry.customTitle;
+        const fileSize = fs.statSync(transcriptPath).size;
+        if (fileSize > TAIL_THRESHOLD_BYTES) {
+            // Tail-read path: read first line + last TAIL_READ_BYTES
+            const firstLine = await readFirstLine(transcriptPath);
+            if (firstLine) {
+                try {
+                    const entry = JSON.parse(firstLine);
+                    if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+                        customTitle = entry.customTitle;
+                    }
+                    else if (typeof entry.slug === 'string') {
+                        latestSlug = entry.slug;
+                    }
+                    processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
                 }
-                else if (typeof entry.slug === 'string') {
-                    latestSlug = entry.slug;
+                catch {
+                    // Skip malformed first line
                 }
-                processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
             }
-            catch {
-                // Skip malformed lines
+            const tailData = readTailBytes(transcriptPath, TAIL_READ_BYTES);
+            const tailLines = tailData.split('\n');
+            // Skip first line — it may be a partial line cut mid-byte
+            for (let i = 1; i < tailLines.length; i++) {
+                const line = tailLines[i].trim();
+                if (!line)
+                    continue;
+                try {
+                    const entry = JSON.parse(line);
+                    if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+                        customTitle = entry.customTitle;
+                    }
+                    else if (typeof entry.slug === 'string') {
+                        latestSlug = entry.slug;
+                    }
+                    processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
+                }
+                catch {
+                    // Skip malformed lines
+                }
+            }
+        }
+        else {
+            // Standard streaming path for files <= TAIL_THRESHOLD_BYTES
+            const fileStream = fs.createReadStream(transcriptPath);
+            const rl = readline.createInterface({
+                input: fileStream,
+                crlfDelay: Infinity,
+            });
+            for await (const line of rl) {
+                if (!line.trim())
+                    continue;
+                try {
+                    const entry = JSON.parse(line);
+                    if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+                        customTitle = entry.customTitle;
+                    }
+                    else if (typeof entry.slug === 'string') {
+                        latestSlug = entry.slug;
+                    }
+                    processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
+                }
+                catch {
+                    // Skip malformed lines
+                }
             }
         }
     }
@@ -184,6 +230,29 @@ function normalizeTaskStatus(status) {
             return 'completed';
         default:
             return null;
+    }
+}
+async function readFirstLine(filePath) {
+    const stream = fs.createReadStream(filePath, { end: 4096 });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    for await (const line of rl) {
+        rl.close();
+        stream.destroy();
+        return line;
+    }
+    return null;
+}
+function readTailBytes(filePath, bytes) {
+    const fd = fs.openSync(filePath, 'r');
+    try {
+        const stat = fs.fstatSync(fd);
+        const start = Math.max(0, stat.size - bytes);
+        const buf = Buffer.alloc(Math.min(bytes, stat.size));
+        fs.readSync(fd, buf, 0, buf.length, start);
+        return buf.toString('utf8');
+    }
+    finally {
+        fs.closeSync(fd);
     }
 }
 //# sourceMappingURL=transcript.js.map

@@ -1,8 +1,11 @@
 import { getModelName, getProviderLabel } from '../../stdin.js';
-import { getOutputSpeed } from '../../speed-tracker.js';
-import { cyan, dim, magenta, yellow, red, claudeOrange } from '../colors.js';
+import { getTokenSpeed } from '../../speed-tracker.js';
+import { cyan, dim, green, magenta, yellow, red, claudeOrange } from '../colors.js';
 export function renderProjectLine(ctx) {
     const display = ctx.config?.display;
+    const ascii = display?.asciiMode ?? false;
+    const symDeleted = ascii ? 'x' : '✘';
+    const symDuration = ascii ? 'T:' : '⏱️ ';
     const parts = [];
     if (display?.showModel !== false) {
         const model = getModelName(ctx.stdin);
@@ -16,8 +19,9 @@ export function renderProjectLine(ctx) {
         parts.push(cyan(`[${modelDisplay}]`));
     }
     let projectPart = null;
-    if (display?.showProject !== false && ctx.stdin.cwd) {
-        const segments = ctx.stdin.cwd.split(/[/\\]/).filter(Boolean);
+    const projectDir = ctx.stdin.workspace?.project_dir ?? ctx.stdin.workspace?.current_dir ?? ctx.stdin.cwd;
+    if (display?.showProject !== false && projectDir) {
+        const segments = projectDir.split(/[/\\]/).filter(Boolean);
         const pathLevels = ctx.config?.pathLevels ?? 1;
         const projectPath = segments.length > 0 ? segments.slice(-pathLevels).join('/') : '/';
         projectPart = yellow(projectPath);
@@ -46,7 +50,7 @@ export function renderProjectLine(ctx) {
             if (added > 0)
                 statParts.push(`+${added}`);
             if (deleted > 0)
-                statParts.push(`✘${deleted}`);
+                statParts.push(`${symDeleted}${deleted}`);
             if (untracked > 0)
                 statParts.push(`?${untracked}`);
             if (statParts.length > 0) {
@@ -70,14 +74,32 @@ export function renderProjectLine(ctx) {
     if (ctx.extraLabel) {
         parts.push(dim(ctx.extraLabel));
     }
+    if ((display?.showLinesChanged ?? true) && ctx.stdin.cost) {
+        const la = ctx.stdin.cost.total_lines_added;
+        const lr = ctx.stdin.cost.total_lines_removed;
+        if (la || lr) {
+            const lParts = [];
+            if (la)
+                lParts.push(green(`+${la}`));
+            if (lr)
+                lParts.push(red(`-${lr}`));
+            parts.push(dim(lParts.join(' ')));
+        }
+    }
     if (display?.showSpeed) {
-        const speed = getOutputSpeed(ctx.stdin);
-        if (speed !== null) {
-            parts.push(dim(`out: ${speed.toFixed(1)} tok/s`));
+        const speeds = getTokenSpeed(ctx.stdin);
+        if (speeds) {
+            const speedParts = [];
+            if (speeds.input !== null)
+                speedParts.push(`in: ${speeds.input.toFixed(0)}`);
+            if (speeds.output !== null)
+                speedParts.push(`out: ${speeds.output.toFixed(0)}`);
+            if (speedParts.length > 0)
+                parts.push(dim(`${speedParts.join(' ')} tok/s`));
         }
     }
     if (display?.showDuration !== false && ctx.sessionDuration) {
-        parts.push(dim(`⏱️  ${ctx.sessionDuration}`));
+        parts.push(dim(`${symDuration} ${ctx.sessionDuration}`));
     }
     const customLine = display?.customLine;
     if (customLine) {

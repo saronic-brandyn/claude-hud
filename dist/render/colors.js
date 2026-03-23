@@ -1,5 +1,6 @@
 export const RESET = '\x1b[0m';
-const DIM = '\x1b[2m';
+const DIM_FALLBACK = '\x1b[2m';
+let resolvedDim = DIM_FALLBACK;
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -40,6 +41,10 @@ function resolveAnsi(value, fallback) {
     }
     return ANSI_BY_NAME[value] ?? fallback;
 }
+/** Initialize color overrides from config. Call once before rendering. */
+export function initColors(overrides) {
+    resolvedDim = resolveAnsi(overrides?.dim, DIM_FALLBACK);
+}
 function colorize(text, color) {
     return `${color}${text}${RESET}`;
 }
@@ -59,7 +64,7 @@ export function magenta(text) {
     return colorize(text, MAGENTA);
 }
 export function dim(text) {
-    return colorize(text, DIM);
+    return colorize(text, resolvedDim);
 }
 export function claudeOrange(text) {
     return colorize(text, CLAUDE_ORANGE);
@@ -90,7 +95,7 @@ export function quotaBar(percent, width = 10, colors) {
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
     const color = getQuotaColor(safePercent, colors);
-    return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
+    return `${color}${'█'.repeat(filled)}${resolvedDim}${'░'.repeat(empty)}${RESET}`;
 }
 export function coloredBar(percent, width = 10, colors) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
@@ -98,6 +103,22 @@ export function coloredBar(percent, width = 10, colors) {
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
     const color = getContextColor(safePercent, colors);
-    return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
+    return `${color}${'█'.repeat(filled)}${resolvedDim}${'░'.repeat(empty)}${RESET}`;
+}
+export function quotaBarAscii(percent, width = 10, colors) {
+    const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+    const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+    const filled = Math.round((safePercent / 100) * safeWidth);
+    const empty = safeWidth - filled;
+    const color = getQuotaColor(safePercent, colors);
+    return `${color}${'#'.repeat(filled)}${resolvedDim}${'-'.repeat(empty)}${RESET}`;
+}
+export function coloredBarAscii(percent, width = 10, colors) {
+    const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+    const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+    const filled = Math.round((safePercent / 100) * safeWidth);
+    const empty = safeWidth - filled;
+    const color = getContextColor(safePercent, colors);
+    return `${color}${'#'.repeat(filled)}${resolvedDim}${'-'.repeat(empty)}${RESET}`;
 }
 //# sourceMappingURL=colors.js.map

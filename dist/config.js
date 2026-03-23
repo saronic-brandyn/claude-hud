@@ -6,6 +6,7 @@ export const DEFAULT_ELEMENT_ORDER = [
     'project',
     'context',
     'usage',
+    'cost',
     'environment',
     'tools',
     'agents',
@@ -38,10 +39,15 @@ export const DEFAULT_CONFIG = {
         showAgents: false,
         showTodos: false,
         showSessionName: false,
+        asciiMode: false,
+        showCost: true,
+        showCostBreakdown: false,
+        showLinesChanged: true,
         autocompactBuffer: 'enabled',
         usageThreshold: 0,
         sevenDayThreshold: 80,
         environmentThreshold: 0,
+        countsHideAfterSeconds: 30,
         customLine: '',
     },
     usage: {
@@ -49,6 +55,7 @@ export const DEFAULT_CONFIG = {
         failureCacheTtlSeconds: 15,
     },
     colors: {
+        dim: 245,
         context: 'green',
         usage: 'brightBlue',
         warning: 'yellow',
@@ -70,7 +77,7 @@ function validateAutocompactBuffer(value) {
     return value === 'enabled' || value === 'disabled';
 }
 function validateContextValue(value) {
-    return value === 'percent' || value === 'tokens' || value === 'remaining';
+    return value === 'percent' || value === 'tokens' || value === 'remaining' || value === 'usable';
 }
 function validateColorName(value) {
     return value === 'red'
@@ -217,12 +224,27 @@ export function mergeConfig(userConfig) {
         showSessionName: typeof migrated.display?.showSessionName === 'boolean'
             ? migrated.display.showSessionName
             : DEFAULT_CONFIG.display.showSessionName,
+        asciiMode: typeof migrated.display?.asciiMode === 'boolean'
+            ? migrated.display.asciiMode
+            : DEFAULT_CONFIG.display.asciiMode,
+        showCost: typeof migrated.display?.showCost === 'boolean'
+            ? migrated.display.showCost
+            : DEFAULT_CONFIG.display.showCost,
+        showCostBreakdown: typeof migrated.display?.showCostBreakdown === 'boolean'
+            ? migrated.display.showCostBreakdown
+            : DEFAULT_CONFIG.display.showCostBreakdown,
+        showLinesChanged: typeof migrated.display?.showLinesChanged === 'boolean'
+            ? migrated.display.showLinesChanged
+            : DEFAULT_CONFIG.display.showLinesChanged,
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer
             : DEFAULT_CONFIG.display.autocompactBuffer,
         usageThreshold: validateThreshold(migrated.display?.usageThreshold, 100),
         sevenDayThreshold: validateThreshold(migrated.display?.sevenDayThreshold, 100),
         environmentThreshold: validateThreshold(migrated.display?.environmentThreshold, 100),
+        countsHideAfterSeconds: typeof migrated.display?.countsHideAfterSeconds === 'number' && migrated.display.countsHideAfterSeconds >= 0
+            ? migrated.display.countsHideAfterSeconds
+            : DEFAULT_CONFIG.display.countsHideAfterSeconds,
         customLine: typeof migrated.display?.customLine === 'string'
             ? migrated.display.customLine.slice(0, 80)
             : DEFAULT_CONFIG.display.customLine,
@@ -232,6 +254,9 @@ export function mergeConfig(userConfig) {
         failureCacheTtlSeconds: validatePositiveInt(migrated.usage?.failureCacheTtlSeconds, DEFAULT_CONFIG.usage.failureCacheTtlSeconds),
     };
     const colors = {
+        dim: validateColorValue(migrated.colors?.dim)
+            ? migrated.colors.dim
+            : DEFAULT_CONFIG.colors.dim,
         context: validateColorValue(migrated.colors?.context)
             ? migrated.colors.context
             : DEFAULT_CONFIG.colors.context,

@@ -1,5 +1,7 @@
 import type { HudColorOverrides } from '../config.js';
 export declare const RESET = "\u001B[0m";
+/** Initialize color overrides from config. Call once before rendering. */
+export declare function initColors(overrides?: Partial<HudColorOverrides>): void;
 export declare function green(text: string): string;
 export declare function yellow(text: string): string;
 export declare function red(text: string): string;
@@ -13,4 +15,6 @@ export declare function getContextColor(percent: number, colors?: Partial<HudCol
 export declare function getQuotaColor(percent: number, colors?: Partial<HudColorOverrides>): string;
 export declare function quotaBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
 export declare function coloredBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
+export declare function quotaBarAscii(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
+export declare function coloredBarAscii(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
 //# sourceMappingURL=colors.d.ts.map
