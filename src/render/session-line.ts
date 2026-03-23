@@ -1,7 +1,7 @@
 import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel } from '../stdin.js';
-import { getOutputSpeed } from '../speed-tracker.js';
+import { getTokenSpeed } from '../speed-tracker.js';
 import { coloredBar, coloredBarAscii, critical, cyan, dim, green, magenta, red, warning, yellow, getContextColor, quotaBar, quotaBarAscii, claudeOrange, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { formatTokens, formatContextValue, formatUsagePercent, formatUsageError, formatResetTime } from './format-helpers.js';
@@ -235,9 +235,12 @@ export function renderSessionLine(ctx: RenderContext): string {
 
   // Session duration
   if (display?.showSpeed) {
-    const speed = getOutputSpeed(ctx.stdin);
-    if (speed !== null) {
-      parts.push(dim(`out: ${speed.toFixed(1)} tok/s`));
+    const speeds = getTokenSpeed(ctx.stdin);
+    if (speeds) {
+      const speedParts: string[] = [];
+      if (speeds.input !== null) speedParts.push(`in: ${speeds.input.toFixed(0)}`);
+      if (speeds.output !== null) speedParts.push(`out: ${speeds.output.toFixed(0)}`);
+      if (speedParts.length > 0) parts.push(dim(`${speedParts.join(' ')} tok/s`));
     }
   }
 

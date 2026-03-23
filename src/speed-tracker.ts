@@ -8,8 +8,14 @@ import { atomicWriteFileSync } from './atomic-write.js';
 const SPEED_WINDOW_MS = 2000;
 
 interface SpeedCache {
+  inputTokens: number;
   outputTokens: number;
   timestamp: number;
+}
+
+export interface TokenSpeed {
+  input: number | null;
+  output: number | null;
 }
 
 export type SpeedTrackerDeps = {
@@ -32,7 +38,7 @@ function readCache(homeDir: string): SpeedCache | null {
     if (!fs.existsSync(cachePath)) return null;
     const content = fs.readFileSync(cachePath, 'utf8');
     const parsed = JSON.parse(content) as SpeedCache;
-    if (typeof parsed.outputTokens !== 'number' || typeof parsed.timestamp !== 'number') {
+    if (typeof parsed.outputTokens !== 'number' || typeof parsed.timestamp !== 'number' || typeof parsed.inputTokens !== 'number') {
       return null;
     }
     return parsed;
@@ -55,25 +61,41 @@ function writeCache(homeDir: string, cache: SpeedCache): void {
 }
 
 export function getOutputSpeed(stdin: StdinData, overrides: Partial<SpeedTrackerDeps> = {}): number | null {
-  const outputTokens = stdin.context_window?.current_usage?.output_tokens;
+  const result = getTokenSpeed(stdin, overrides);
+  return result?.output ?? null;
+}
+
+export function getTokenSpeed(stdin: StdinData, overrides: Partial<SpeedTrackerDeps> = {}): TokenSpeed | null {
+  const usage = stdin.context_window?.current_usage;
+  const inputTokens = usage?.input_tokens;
+  const outputTokens = usage?.output_tokens;
   if (typeof outputTokens !== 'number' || !Number.isFinite(outputTokens)) {
     return null;
   }
+  const safeInput = (typeof inputTokens === 'number' && Number.isFinite(inputTokens)) ? inputTokens : 0;
 
   const deps = { ...defaultDeps, ...overrides };
   const now = deps.now();
   const homeDir = deps.homeDir();
   const previous = readCache(homeDir);
 
-  let speed: number | null = null;
-  if (previous && outputTokens >= previous.outputTokens) {
-    const deltaTokens = outputTokens - previous.outputTokens;
+  let inputSpeed: number | null = null;
+  let outputSpeed: number | null = null;
+
+  if (previous) {
     const deltaMs = now - previous.timestamp;
-    if (deltaTokens > 0 && deltaMs > 0 && deltaMs <= SPEED_WINDOW_MS) {
-      speed = deltaTokens / (deltaMs / 1000);
+    if (deltaMs > 0 && deltaMs <= SPEED_WINDOW_MS) {
+      const deltaOutput = outputTokens - previous.outputTokens;
+      if (deltaOutput > 0) {
+        outputSpeed = deltaOutput / (deltaMs / 1000);
+      }
+      const deltaInput = safeInput - previous.inputTokens;
+      if (deltaInput > 0) {
+        inputSpeed = deltaInput / (deltaMs / 1000);
+      }
     }
   }
 
-  writeCache(homeDir, { outputTokens, timestamp: now });
-  return speed;
+  writeCache(homeDir, { inputTokens: safeInput, outputTokens, timestamp: now });
+  return { input: inputSpeed, output: outputSpeed };
 }

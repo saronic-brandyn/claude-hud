@@ -1,6 +1,6 @@
 import type { RenderContext } from '../../types.js';
 import { getModelName, getProviderLabel } from '../../stdin.js';
-import { getOutputSpeed } from '../../speed-tracker.js';
+import { getTokenSpeed } from '../../speed-tracker.js';
 import { cyan, dim, green, magenta, yellow, red, claudeOrange } from '../colors.js';
 
 export function renderProjectLine(ctx: RenderContext): string | null {
@@ -93,9 +93,12 @@ export function renderProjectLine(ctx: RenderContext): string | null {
   }
 
   if (display?.showSpeed) {
-    const speed = getOutputSpeed(ctx.stdin);
-    if (speed !== null) {
-      parts.push(dim(`out: ${speed.toFixed(1)} tok/s`));
+    const speeds = getTokenSpeed(ctx.stdin);
+    if (speeds) {
+      const speedParts: string[] = [];
+      if (speeds.input !== null) speedParts.push(`in: ${speeds.input.toFixed(0)}`);
+      if (speeds.output !== null) speedParts.push(`out: ${speeds.output.toFixed(0)}`);
+      if (speedParts.length > 0) parts.push(dim(`${speedParts.join(' ')} tok/s`));
     }
   }
 
