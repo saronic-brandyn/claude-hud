@@ -6,7 +6,10 @@ import { getGitStatus } from './git.js';
 import { getUsage } from './usage-api.js';
 import { loadConfig } from './config.js';
 import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
+import { getContextVelocity } from './context-velocity.js';
 import type { RenderContext } from './types.js';
+import type { CumulativeTokenUsage } from './pricing.js';
+import { calculateCost } from './pricing.js';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 
@@ -80,6 +83,28 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
 
     const sessionDuration = formatSessionDuration(transcript.sessionStart, deps.now);
 
+    const contextVelocity = getContextVelocity(stdin);
+
+    // Compute cost estimation
+    let costData: CumulativeTokenUsage | null = null;
+    if (config.display.showCost !== false) {
+      const usage = stdin.context_window?.current_usage;
+      if (usage) {
+        const modelId = stdin.model?.id ?? stdin.model?.display_name ?? 'opus';
+        const tokens: CumulativeTokenUsage = {
+          inputTokens: usage.input_tokens ?? 0,
+          outputTokens: usage.output_tokens ?? 0,
+          cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+          cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+          totalCost: 0,
+          byModel: [{ model: modelId, inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0, cacheWriteTokens: usage.cache_creation_input_tokens ?? 0, cacheReadTokens: usage.cache_read_input_tokens ?? 0 }],
+        };
+        const estimate = calculateCost(tokens);
+        tokens.totalCost = estimate.totalCost;
+        costData = tokens;
+      }
+    }
+
     const ctx: RenderContext = {
       stdin,
       transcript,
@@ -92,6 +117,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       usageData,
       config,
       extraLabel,
+      contextVelocity,
     };
 
     deps.render(ctx);

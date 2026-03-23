@@ -50,12 +50,16 @@ export function renderSessionLine(ctx: RenderContext): string {
   const planDisplay = providerLabel ?? billingLabel;
   const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
 
+  const velocityStr = ctx.contextVelocity
+    ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
+    : '';
+
   if (display?.showModel !== false && display?.showContextBar !== false) {
-    parts.push(`${cyan(`[${modelDisplay}]`)} ${bar} ${contextValueDisplay}`);
+    parts.push(`${cyan(`[${modelDisplay}]`)} ${bar} ${contextValueDisplay}${velocityStr}`);
   } else if (display?.showModel !== false) {
-    parts.push(`${cyan(`[${modelDisplay}]`)} ${contextValueDisplay}`);
+    parts.push(`${cyan(`[${modelDisplay}]`)} ${contextValueDisplay}${velocityStr}`);
   } else if (display?.showContextBar !== false) {
-    parts.push(`${bar} ${contextValueDisplay}`);
+    parts.push(`${bar} ${contextValueDisplay}${velocityStr}`);
   } else {
     parts.push(contextValueDisplay);
   }

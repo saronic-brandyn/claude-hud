@@ -25,9 +25,13 @@ export function renderIdentityLine(ctx: RenderContext): string {
   const ascii = display?.asciiMode ?? false;
   const barFn = ascii ? coloredBarAscii : coloredBar;
 
+  const velocityStr = ctx.contextVelocity
+    ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
+    : '';
+
   let line = display?.showContextBar !== false
-    ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}`
-    : `${dim('Context')} ${contextValueDisplay}`;
+    ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${velocityStr}`
+    : `${dim('Context')} ${contextValueDisplay}${velocityStr}`;
 
   if (display?.showTokenBreakdown !== false && percent >= 85) {
     const usage = ctx.stdin.context_window?.current_usage;
