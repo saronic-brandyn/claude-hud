@@ -1,4 +1,5 @@
 import type { HudConfig } from './config.js';
+import type { CumulativeTokenUsage } from './pricing.js';
 import type { GitStatus } from './git.js';
 
 export interface StdinData {
@@ -89,4 +90,5 @@ export interface RenderContext {
   extraLabel: string | null;
   contextVelocity: number | null;
   compactionEvent: { delta: number; age: number } | null;
+  costData: CumulativeTokenUsage | null;
 }

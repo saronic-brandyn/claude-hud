@@ -7,7 +7,7 @@ export type LineLayoutType = 'compact' | 'expanded';
 
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining';
-export type HudElement = 'project' | 'context' | 'usage' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'context' | 'usage' | 'cost' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'red'
   | 'green'
@@ -32,6 +32,7 @@ export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
   'project',
   'context',
   'usage',
+  'cost',
   'environment',
   'tools',
   'agents',
@@ -67,6 +68,8 @@ export interface HudConfig {
     showTodos: boolean;
     showSessionName: boolean;
     asciiMode: boolean;
+    showCost: boolean;
+    showCostBreakdown: boolean;
     autocompactBuffer: AutocompactBufferMode;
     usageThreshold: number;
     sevenDayThreshold: number;
@@ -108,6 +111,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     showTodos: false,
     showSessionName: false,
     asciiMode: false,
+    showCost: true,
+    showCostBreakdown: false,
     autocompactBuffer: 'enabled',
     usageThreshold: 0,
     sevenDayThreshold: 80,
@@ -311,6 +316,12 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     asciiMode: typeof migrated.display?.asciiMode === 'boolean'
       ? migrated.display.asciiMode
       : DEFAULT_CONFIG.display.asciiMode,
+    showCost: typeof migrated.display?.showCost === 'boolean'
+      ? migrated.display.showCost
+      : DEFAULT_CONFIG.display.showCost,
+    showCostBreakdown: typeof migrated.display?.showCostBreakdown === 'boolean'
+      ? migrated.display.showCostBreakdown
+      : DEFAULT_CONFIG.display.showCostBreakdown,
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer
       : DEFAULT_CONFIG.display.autocompactBuffer,
