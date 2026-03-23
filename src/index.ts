@@ -54,24 +54,26 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     }
 
     const transcriptPath = stdin.transcript_path ?? '';
-    const transcript = await deps.parseTranscript(transcriptPath);
-
-    const { claudeMdCount, rulesCount, mcpCount, hooksCount } = await deps.countConfigs(stdin.cwd);
 
     const config = await deps.loadConfig();
-    const gitStatus = config.gitStatus.enabled
-      ? await deps.getGitStatus(stdin.cwd)
-      : null;
 
-    // Only fetch usage if enabled in config (replaces env var requirement)
-    const usageData = config.display.showUsage !== false
-      ? await deps.getUsage({
-          ttls: {
-            cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
-            failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
-          },
-        })
-      : null;
+    const [transcript, configCounts, gitStatus, usageData] = await Promise.all([
+      deps.parseTranscript(transcriptPath),
+      deps.countConfigs(stdin.cwd),
+      config.gitStatus.enabled
+        ? deps.getGitStatus(stdin.cwd)
+        : Promise.resolve(null),
+      config.display.showUsage !== false
+        ? deps.getUsage({
+            ttls: {
+              cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
+              failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const { claudeMdCount, rulesCount, mcpCount, hooksCount } = configCounts;
 
     const extraCmd = deps.parseExtraCmdArg();
     const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;
