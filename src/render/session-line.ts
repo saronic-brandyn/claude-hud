@@ -2,7 +2,7 @@ import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, coloredBarAscii, critical, cyan, dim, magenta, red, warning, yellow, getContextColor, quotaBar, quotaBarAscii, claudeOrange, RESET } from './colors.js';
+import { coloredBar, coloredBarAscii, critical, cyan, dim, green, magenta, red, warning, yellow, getContextColor, quotaBar, quotaBarAscii, claudeOrange, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { formatTokens, formatContextValue, formatUsagePercent, formatUsageError, formatResetTime } from './format-helpers.js';
 import { renderCostSegment } from './lines/cost.js';
@@ -124,6 +124,18 @@ export function renderSessionLine(ctx: RenderContext): string {
     parts.push(projectPart);
   } else if (gitPart) {
     parts.push(gitPart);
+  }
+
+  // Lines changed
+  if ((display?.showLinesChanged ?? true) && ctx.gitStatus) {
+    const la = ctx.gitStatus.linesAdded;
+    const lr = ctx.gitStatus.linesRemoved;
+    if (la || lr) {
+      const lParts: string[] = [];
+      if (la) lParts.push(green(`+${la}`));
+      if (lr) lParts.push(red(`-${lr}`));
+      parts.push(dim(lParts.join(' ')));
+    }
   }
 
   // Session name (custom title from /rename, or auto-generated slug)

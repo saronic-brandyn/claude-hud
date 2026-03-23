@@ -1,7 +1,7 @@
 import type { RenderContext } from '../../types.js';
 import { getModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { cyan, dim, magenta, yellow, red, claudeOrange } from '../colors.js';
+import { cyan, dim, green, magenta, yellow, red, claudeOrange } from '../colors.js';
 
 export function renderProjectLine(ctx: RenderContext): string | null {
   const display = ctx.config?.display;
@@ -79,6 +79,17 @@ export function renderProjectLine(ctx: RenderContext): string | null {
 
   if (ctx.extraLabel) {
     parts.push(dim(ctx.extraLabel));
+  }
+
+  if ((display?.showLinesChanged ?? true) && ctx.gitStatus) {
+    const la = ctx.gitStatus.linesAdded;
+    const lr = ctx.gitStatus.linesRemoved;
+    if (la || lr) {
+      const lParts: string[] = [];
+      if (la) lParts.push(green(`+${la}`));
+      if (lr) lParts.push(red(`-${lr}`));
+      parts.push(dim(lParts.join(' ')));
+    }
   }
 
   if (display?.showSpeed) {

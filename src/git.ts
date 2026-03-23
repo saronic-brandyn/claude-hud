@@ -16,6 +16,8 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   fileStats?: FileStats;
+  linesAdded?: number;
+  linesRemoved?: number;
 }
 
 export async function getGitBranch(cwd?: string): Promise<string | null> {
@@ -82,7 +84,24 @@ export async function getGitStatus(cwd?: string): Promise<GitStatus | null> {
       // No upstream or error, keep 0/0
     }
 
-    return { branch, isDirty, ahead, behind, fileStats };
+    // Get lines changed (insertions/deletions)
+    let linesAdded: number | undefined;
+    let linesRemoved: number | undefined;
+    try {
+      const { stdout: diffOut } = await execFileAsync(
+        'git',
+        ['diff', '--shortstat', 'HEAD'],
+        { cwd, timeout: 1000, encoding: 'utf8' }
+      );
+      const insertMatch = diffOut.match(/(\d+) insertion/);
+      const deleteMatch = diffOut.match(/(\d+) deletion/);
+      if (insertMatch) linesAdded = parseInt(insertMatch[1], 10);
+      if (deleteMatch) linesRemoved = parseInt(deleteMatch[1], 10);
+    } catch {
+      // No diff or error, keep undefined
+    }
+
+    return { branch, isDirty, ahead, behind, fileStats, linesAdded, linesRemoved };
   } catch {
     return null;
   }

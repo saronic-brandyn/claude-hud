@@ -70,6 +70,7 @@ export interface HudConfig {
     asciiMode: boolean;
     showCost: boolean;
     showCostBreakdown: boolean;
+    showLinesChanged: boolean;
     autocompactBuffer: AutocompactBufferMode;
     usageThreshold: number;
     sevenDayThreshold: number;
@@ -113,6 +114,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     asciiMode: false,
     showCost: true,
     showCostBreakdown: false,
+    showLinesChanged: true,
     autocompactBuffer: 'enabled',
     usageThreshold: 0,
     sevenDayThreshold: 80,
@@ -322,6 +324,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showCostBreakdown: typeof migrated.display?.showCostBreakdown === 'boolean'
       ? migrated.display.showCostBreakdown
       : DEFAULT_CONFIG.display.showCostBreakdown,
+    showLinesChanged: typeof migrated.display?.showLinesChanged === 'boolean'
+      ? migrated.display.showLinesChanged
+      : DEFAULT_CONFIG.display.showLinesChanged,
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer
       : DEFAULT_CONFIG.display.autocompactBuffer,
