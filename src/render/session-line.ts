@@ -5,6 +5,7 @@ import { getOutputSpeed } from '../speed-tracker.js';
 import { coloredBar, coloredBarAscii, critical, cyan, dim, magenta, red, warning, yellow, getContextColor, quotaBar, quotaBarAscii, claudeOrange, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { formatTokens, formatContextValue, formatUsagePercent, formatUsageError, formatResetTime } from './format-helpers.js';
+import { renderCostSegment } from './lines/cost.js';
 
 const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG === '*';
 
@@ -207,6 +208,12 @@ export function renderSessionLine(ctx: RenderContext): string {
         }
       }
     }
+  }
+
+  // Cost estimation
+  const costSegment = renderCostSegment(ctx);
+  if (costSegment) {
+    parts.push(costSegment);
   }
 
   // Session duration
