@@ -29,9 +29,14 @@ export function renderIdentityLine(ctx: RenderContext): string {
     ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
     : '';
 
-  const compactStr = ctx.compactionEvent
-    ? ` ${warning(ascii ? '! Compacted' : '⚡ Compacted', colors)}`
-    : '';
+  let compactStr = '';
+  if (ctx.compactionEvent) {
+    if (ctx.compactionEvent.state === 'compacted') {
+      compactStr = ` ${warning(ascii ? '! Compacted' : '⚡ Compacted', colors)}`;
+    } else {
+      compactStr = ` ${warning(ascii ? '! ~85%' : '⚠ ~85%', colors)}`;
+    }
+  }
 
   let line = display?.showContextBar !== false
     ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${velocityStr}${compactStr}`

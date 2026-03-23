@@ -4,6 +4,8 @@ import * as os from 'node:os';
 import { getHudPluginDir } from './claude-config-dir.js';
 import { atomicWriteFileSync } from './atomic-write.js';
 
+/** Context percent threshold for approaching warning */
+const APPROACHING_THRESHOLD = 85;
 /** Minimum percent drop to count as a compaction event */
 const COMPACTION_THRESHOLD = 10;
 /** How long to display the compaction indicator (ms) */
@@ -19,7 +21,8 @@ interface CompactionCache {
 }
 
 export interface CompactionEvent {
-  delta: number;
+  state: 'approaching' | 'compacted';
+  delta?: number;
   age: number;
 }
 
@@ -97,7 +100,12 @@ export function detectCompaction(
   writeCache(homeDir, cache);
 
   if (cache.compactedAt && cache.compactedDelta && now - cache.compactedAt < INDICATOR_DURATION_MS) {
-    return { delta: cache.compactedDelta, age: now - cache.compactedAt };
+    return { state: 'compacted', delta: cache.compactedDelta, age: now - cache.compactedAt };
+  }
+
+  // Approaching warning when context is high and no recent compaction
+  if (currentPercent >= APPROACHING_THRESHOLD) {
+    return { state: 'approaching', age: 0 };
   }
 
   return null;
