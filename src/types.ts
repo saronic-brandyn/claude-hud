@@ -118,4 +118,5 @@ export interface RenderContext {
   contextVelocity: number | null;
   compactionEvent: CompactionEvent | null;
   costData: StdinData['cost'] | null;
+  queryCost: { cost: number; isActive: boolean } | null;
 }
