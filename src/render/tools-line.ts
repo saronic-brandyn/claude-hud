@@ -8,6 +8,10 @@ export function renderToolsLine(ctx: RenderContext): string | null {
     return null;
   }
 
+  const ascii = ctx.config?.display?.asciiMode ?? false;
+  const symRunning = ascii ? '~' : '◐';
+  const symDone = ascii ? '+' : '✓';
+
   const parts: string[] = [];
 
   const runningTools = tools.filter((t) => t.status === 'running');
@@ -15,7 +19,7 @@ export function renderToolsLine(ctx: RenderContext): string | null {
 
   for (const tool of runningTools.slice(-2)) {
     const target = tool.target ? truncatePath(tool.target) : '';
-    parts.push(`${yellow('◐')} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}`);
+    parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}`);
   }
 
   const toolCounts = new Map<string, number>();
@@ -29,7 +33,7 @@ export function renderToolsLine(ctx: RenderContext): string | null {
     .slice(0, 4);
 
   for (const [name, count] of sortedTools) {
-    parts.push(`${green('✓')} ${name} ${dim(`×${count}`)}`);
+    parts.push(`${green(symDone)} ${name} ${dim(`×${count}`)}`);
   }
 
   if (parts.length === 0) {

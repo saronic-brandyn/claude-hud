@@ -5,6 +5,9 @@ import { cyan, dim, magenta, yellow, red, claudeOrange } from '../colors.js';
 
 export function renderProjectLine(ctx: RenderContext): string | null {
   const display = ctx.config?.display;
+  const ascii = display?.asciiMode ?? false;
+  const symDeleted = ascii ? 'x' : '✘';
+  const symDuration = ascii ? 'T:' : '⏱️ ';
   const parts: string[] = [];
 
   if (display?.showModel !== false) {
@@ -52,7 +55,7 @@ export function renderProjectLine(ctx: RenderContext): string | null {
       const statParts: string[] = [];
       if (modified > 0) statParts.push(`!${modified}`);
       if (added > 0) statParts.push(`+${added}`);
-      if (deleted > 0) statParts.push(`✘${deleted}`);
+      if (deleted > 0) statParts.push(`${symDeleted}${deleted}`);
       if (untracked > 0) statParts.push(`?${untracked}`);
       if (statParts.length > 0) {
         gitParts.push(` ${statParts.join(' ')}`);
@@ -86,7 +89,7 @@ export function renderProjectLine(ctx: RenderContext): string | null {
   }
 
   if (display?.showDuration !== false && ctx.sessionDuration) {
-    parts.push(dim(`⏱️  ${ctx.sessionDuration}`));
+    parts.push(dim(`${symDuration} ${ctx.sessionDuration}`));
   }
 
   const customLine = display?.customLine;

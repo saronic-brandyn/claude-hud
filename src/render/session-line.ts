@@ -2,7 +2,7 @@ import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, cyan, dim, magenta, red, warning, yellow, getContextColor, quotaBar, claudeOrange, RESET } from './colors.js';
+import { coloredBar, coloredBarAscii, critical, cyan, dim, magenta, red, warning, yellow, getContextColor, quotaBar, quotaBarAscii, claudeOrange, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { formatTokens, formatContextValue, formatUsagePercent, formatUsageError, formatResetTime } from './format-helpers.js';
 
@@ -25,8 +25,14 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   const colors = ctx.config?.colors;
+  const ascii = ctx.config?.display?.asciiMode ?? false;
   const barWidth = getAdaptiveBarWidth();
-  const bar = coloredBar(percent, barWidth, colors);
+  const barFn = ascii ? coloredBarAscii : coloredBar;
+  const quotaBarFn = ascii ? quotaBarAscii : quotaBar;
+  const symDeleted = ascii ? 'x' : '✘';
+  const symWarning = ascii ? '!' : '⚠';
+  const symDuration = ascii ? 'T:' : '⏱️ ';
+  const bar = barFn(percent, barWidth, colors);
 
   const parts: string[] = [];
   const display = ctx.config?.display;
@@ -94,7 +100,7 @@ export function renderSessionLine(ctx: RenderContext): string {
       const statParts: string[] = [];
       if (modified > 0) statParts.push(`!${modified}`);
       if (added > 0) statParts.push(`+${added}`);
-      if (deleted > 0) statParts.push(`✘${deleted}`);
+      if (deleted > 0) statParts.push(`${symDeleted}${deleted}`);
       if (untracked > 0) statParts.push(`?${untracked}`);
       if (statParts.length > 0) {
         gitParts.push(` ${statParts.join(' ')}`);
@@ -145,12 +151,12 @@ export function renderSessionLine(ctx: RenderContext): string {
   if (display?.showUsage !== false && ctx.usageData?.planName && !providerLabel) {
     if (ctx.usageData.apiUnavailable) {
       const errorHint = formatUsageError(ctx.usageData.apiError);
-      parts.push(warning(`usage: ⚠${errorHint}`, colors));
+      parts.push(warning(`usage: ${symWarning}${errorHint}`, colors));
     } else if (isLimitReached(ctx.usageData)) {
       const resetTime = ctx.usageData.fiveHour === 100
         ? formatResetTime(ctx.usageData.fiveHourResetAt)
         : formatResetTime(ctx.usageData.sevenDayResetAt);
-      parts.push(critical(`⚠ Limit reached${resetTime ? ` (resets ${resetTime})` : ''}`, colors));
+      parts.push(critical(`${symWarning} Limit reached${resetTime ? ` (resets ${resetTime})` : ''}`, colors));
     } else {
       const usageThreshold = display?.usageThreshold ?? 0;
       const fiveHour = ctx.usageData.fiveHour;
@@ -167,8 +173,8 @@ export function renderSessionLine(ctx: RenderContext): string {
         const usageBarEnabled = display?.usageBarEnabled ?? true;
         const fiveHourPart = usageBarEnabled
           ? (fiveHourReset
-              ? `${quotaBar(fiveHour ?? 0, barWidth, colors)} ${fiveHourDisplay} (${fiveHourReset} / 5h)`
-              : `${quotaBar(fiveHour ?? 0, barWidth, colors)} ${fiveHourDisplay}`)
+              ? `${quotaBarFn(fiveHour ?? 0, barWidth, colors)} ${fiveHourDisplay} (${fiveHourReset} / 5h)`
+              : `${quotaBarFn(fiveHour ?? 0, barWidth, colors)} ${fiveHourDisplay}`)
           : (fiveHourReset
               ? `5h: ${fiveHourDisplay} (${fiveHourReset})`
               : `5h: ${fiveHourDisplay}`);
@@ -179,8 +185,8 @@ export function renderSessionLine(ctx: RenderContext): string {
           const sevenDayReset = formatResetTime(ctx.usageData.sevenDayResetAt);
           const sevenDayPart = usageBarEnabled
             ? (sevenDayReset
-                ? `${quotaBar(sevenDay, barWidth, colors)} ${sevenDayDisplay} (${sevenDayReset} / 7d)`
-                : `${quotaBar(sevenDay, barWidth, colors)} ${sevenDayDisplay}`)
+                ? `${quotaBarFn(sevenDay, barWidth, colors)} ${sevenDayDisplay} (${sevenDayReset} / 7d)`
+                : `${quotaBarFn(sevenDay, barWidth, colors)} ${sevenDayDisplay}`)
             : (sevenDayReset
                 ? `7d: ${sevenDayDisplay} (${sevenDayReset})`
                 : `7d: ${sevenDayDisplay}`);
@@ -201,7 +207,7 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   if (display?.showDuration !== false && ctx.sessionDuration) {
-    parts.push(dim(`⏱️  ${ctx.sessionDuration}`));
+    parts.push(dim(`${symDuration} ${ctx.sessionDuration}`));
   }
 
   if (ctx.extraLabel) {

@@ -116,3 +116,21 @@ export function coloredBar(percent: number, width: number = 10, colors?: Partial
   const color = getContextColor(safePercent, colors);
   return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
 }
+
+export function quotaBarAscii(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
+  const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const filled = Math.round((safePercent / 100) * safeWidth);
+  const empty = safeWidth - filled;
+  const color = getQuotaColor(safePercent, colors);
+  return `${color}${'#'.repeat(filled)}${DIM}${'-'.repeat(empty)}${RESET}`;
+}
+
+export function coloredBarAscii(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
+  const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const filled = Math.round((safePercent / 100) * safeWidth);
+  const empty = safeWidth - filled;
+  const color = getContextColor(safePercent, colors);
+  return `${color}${'#'.repeat(filled)}${DIM}${'-'.repeat(empty)}${RESET}`;
+}
