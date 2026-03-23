@@ -53,13 +53,16 @@ export function renderSessionLine(ctx: RenderContext): string {
   const velocityStr = ctx.contextVelocity
     ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
     : '';
+  const compactStr = ctx.compactionEvent
+    ? ` ${warning(ascii ? '! Compacted' : '⚡ Compacted', colors)}`
+    : '';
 
   if (display?.showModel !== false && display?.showContextBar !== false) {
-    parts.push(`${cyan(`[${modelDisplay}]`)} ${bar} ${contextValueDisplay}${velocityStr}`);
+    parts.push(`${cyan(`[${modelDisplay}]`)} ${bar} ${contextValueDisplay}${velocityStr}${compactStr}`);
   } else if (display?.showModel !== false) {
-    parts.push(`${cyan(`[${modelDisplay}]`)} ${contextValueDisplay}${velocityStr}`);
+    parts.push(`${cyan(`[${modelDisplay}]`)} ${contextValueDisplay}${velocityStr}${compactStr}`);
   } else if (display?.showContextBar !== false) {
-    parts.push(`${bar} ${contextValueDisplay}${velocityStr}`);
+    parts.push(`${bar} ${contextValueDisplay}${velocityStr}${compactStr}`);
   } else {
     parts.push(contextValueDisplay);
   }

@@ -1,6 +1,6 @@
 import type { RenderContext } from '../../types.js';
 import { getContextPercent, getBufferedPercent } from '../../stdin.js';
-import { coloredBar, coloredBarAscii, dim, getContextColor, RESET } from '../colors.js';
+import { coloredBar, coloredBarAscii, dim, warning, getContextColor, RESET } from '../colors.js';
 import { getAdaptiveBarWidth } from '../../utils/terminal.js';
 import { formatTokens, formatContextValue } from '../format-helpers.js';
 
@@ -29,9 +29,13 @@ export function renderIdentityLine(ctx: RenderContext): string {
     ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
     : '';
 
+  const compactStr = ctx.compactionEvent
+    ? ` ${warning(ascii ? '! Compacted' : '⚡ Compacted', colors)}`
+    : '';
+
   let line = display?.showContextBar !== false
-    ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${velocityStr}`
-    : `${dim('Context')} ${contextValueDisplay}${velocityStr}`;
+    ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${velocityStr}${compactStr}`
+    : `${dim('Context')} ${contextValueDisplay}${velocityStr}${compactStr}`;
 
   if (display?.showTokenBreakdown !== false && percent >= 85) {
     const usage = ctx.stdin.context_window?.current_usage;
