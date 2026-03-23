@@ -12,7 +12,7 @@ export function formatTokens(n: number): string {
   return n.toString();
 }
 
-export function formatContextValue(ctx: RenderContext, percent: number, mode: 'percent' | 'tokens' | 'remaining'): string {
+export function formatContextValue(ctx: RenderContext, percent: number, mode: 'percent' | 'tokens' | 'remaining' | 'usable'): string {
   if (mode === 'tokens') {
     const totalTokens = getTotalTokens(ctx.stdin);
     const size = ctx.stdin.context_window?.context_window_size ?? 0;
@@ -20,6 +20,12 @@ export function formatContextValue(ctx: RenderContext, percent: number, mode: 'p
       return `${formatTokens(totalTokens)}/${formatTokens(size)}`;
     }
     return formatTokens(totalTokens);
+  }
+
+  if (mode === 'usable') {
+    // Usable = % of 80% threshold (where autocompact triggers)
+    const usablePercent = Math.min(100, Math.round((percent / 80) * 100));
+    return `${usablePercent}%`;
   }
 
   if (mode === 'remaining') {
