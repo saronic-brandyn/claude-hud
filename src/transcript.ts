@@ -2,6 +2,9 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 import type { TranscriptData, ToolEntry, AgentEntry, TodoItem } from './types.js';
 
+const TAIL_THRESHOLD_BYTES = 512 * 1024;
+const TAIL_READ_BYTES = 128 * 1024;
+
 interface TranscriptLine {
   timestamp?: string;
   type?: string;
@@ -40,25 +43,65 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
   let customTitle: string | undefined;
 
   try {
-    const fileStream = fs.createReadStream(transcriptPath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
+    const fileSize = fs.statSync(transcriptPath).size;
 
-    for await (const line of rl) {
-      if (!line.trim()) continue;
-
-      try {
-        const entry = JSON.parse(line) as TranscriptLine;
-        if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
-          customTitle = entry.customTitle;
-        } else if (typeof entry.slug === 'string') {
-          latestSlug = entry.slug;
+    if (fileSize > TAIL_THRESHOLD_BYTES) {
+      // Tail-read path: read first line + last TAIL_READ_BYTES
+      const firstLine = await readFirstLine(transcriptPath);
+      if (firstLine) {
+        try {
+          const entry = JSON.parse(firstLine) as TranscriptLine;
+          if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+            customTitle = entry.customTitle;
+          } else if (typeof entry.slug === 'string') {
+            latestSlug = entry.slug;
+          }
+          processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
+        } catch {
+          // Skip malformed first line
         }
-        processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
-      } catch {
-        // Skip malformed lines
+      }
+
+      const tailData = readTailBytes(transcriptPath, TAIL_READ_BYTES);
+      const tailLines = tailData.split('\n');
+      // Skip first line — it may be a partial line cut mid-byte
+      for (let i = 1; i < tailLines.length; i++) {
+        const line = tailLines[i].trim();
+        if (!line) continue;
+        try {
+          const entry = JSON.parse(line) as TranscriptLine;
+          if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+            customTitle = entry.customTitle;
+          } else if (typeof entry.slug === 'string') {
+            latestSlug = entry.slug;
+          }
+          processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
+        } catch {
+          // Skip malformed lines
+        }
+      }
+    } else {
+      // Standard streaming path for files <= TAIL_THRESHOLD_BYTES
+      const fileStream = fs.createReadStream(transcriptPath);
+      const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity,
+      });
+
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+
+        try {
+          const entry = JSON.parse(line) as TranscriptLine;
+          if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+            customTitle = entry.customTitle;
+          } else if (typeof entry.slug === 'string') {
+            latestSlug = entry.slug;
+          }
+          processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
+        } catch {
+          // Skip malformed lines
+        }
       }
     }
   } catch {
@@ -228,5 +271,29 @@ function normalizeTaskStatus(status: unknown): TodoItem['status'] | null {
       return 'completed';
     default:
       return null;
+  }
+}
+
+async function readFirstLine(filePath: string): Promise<string | null> {
+  const stream = fs.createReadStream(filePath, { end: 4096 });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    rl.close();
+    stream.destroy();
+    return line;
+  }
+  return null;
+}
+
+function readTailBytes(filePath: string, bytes: number): string {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const stat = fs.fstatSync(fd);
+    const start = Math.max(0, stat.size - bytes);
+    const buf = Buffer.alloc(Math.min(bytes, stat.size));
+    fs.readSync(fd, buf, 0, buf.length, start);
+    return buf.toString('utf8');
+  } finally {
+    fs.closeSync(fd);
   }
 }

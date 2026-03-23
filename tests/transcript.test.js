@@ -340,7 +340,35 @@ describe('parseTranscript', () => {
     assert.equal(result.sessionName, 'Custom Title Wins');
   });
 
-  // 20. extractTarget returns pattern for Glob/Grep, truncated command for Bash
+  // 20. handles large transcript within 200ms (performance regression test)
+  test('handles large transcript within 200ms', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-transcript-'));
+    const file = path.join(dir, 'large.jsonl');
+    const lines = [];
+    for (let i = 0; i < 5000; i++) {
+      lines.push(JSON.stringify({
+        timestamp: '2026-01-01T00:00:00Z',
+        message: { content: [{ type: 'tool_use', id: `t${i}`, name: 'Read', input: { file_path: `/file${i}.ts` } }] },
+      }));
+      lines.push(JSON.stringify({
+        timestamp: '2026-01-01T00:00:00Z',
+        message: { content: [{ type: 'tool_result', tool_use_id: `t${i}` }] },
+      }));
+    }
+    fs.writeFileSync(file, lines.join('\n'), 'utf8');
+    try {
+      const start = Date.now();
+      const result = await parseTranscript(file);
+      const elapsed = Date.now() - start;
+      assert.ok(elapsed < 200, `took ${elapsed}ms, expected <200ms`);
+      assert.strictEqual(result.tools.length, 20);
+      assert.ok(result.sessionStart instanceof Date);
+    } finally {
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+
+  // 21. extractTarget returns pattern for Glob/Grep, truncated command for Bash
   test('extractTarget: Glob/Grep return pattern, Bash truncates command', async () => {
     const longCmd = 'npm run build -- --verbose --watch --all-targets-in-scope';
     const { file, cleanup: c } = tmpJsonl([
