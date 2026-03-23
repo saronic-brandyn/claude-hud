@@ -51,8 +51,8 @@ export function renderSessionLine(ctx: RenderContext): string {
   const planDisplay = providerLabel ?? billingLabel;
   const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
 
-  const velocityStr = ctx.contextVelocity
-    ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
+  const deltaStr = ctx.contextDelta
+    ? dim(` +${formatTokens(ctx.contextDelta)}`)
     : '';
   let compactStr = '';
   if (ctx.compactionEvent) {
@@ -64,11 +64,11 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   if (display?.showModel !== false && display?.showContextBar !== false) {
-    parts.push(`${cyan(`[${modelDisplay}]`)} ${bar} ${contextValueDisplay}${velocityStr}${compactStr}`);
+    parts.push(`${cyan(`[${modelDisplay}]`)} ${bar} ${contextValueDisplay}${deltaStr}${compactStr}`);
   } else if (display?.showModel !== false) {
-    parts.push(`${cyan(`[${modelDisplay}]`)} ${contextValueDisplay}${velocityStr}${compactStr}`);
+    parts.push(`${cyan(`[${modelDisplay}]`)} ${contextValueDisplay}${deltaStr}${compactStr}`);
   } else if (display?.showContextBar !== false) {
-    parts.push(`${bar} ${contextValueDisplay}${velocityStr}${compactStr}`);
+    parts.push(`${bar} ${contextValueDisplay}${deltaStr}${compactStr}`);
   } else {
     parts.push(contextValueDisplay);
   }

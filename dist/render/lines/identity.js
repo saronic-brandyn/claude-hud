@@ -18,8 +18,8 @@ export function renderIdentityLine(ctx) {
     const contextValueDisplay = `${getContextColor(percent, colors)}${contextValue}${RESET}`;
     const ascii = display?.asciiMode ?? false;
     const barFn = ascii ? coloredBarAscii : coloredBar;
-    const velocityStr = ctx.contextVelocity
-        ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
+    const deltaStr = ctx.contextDelta
+        ? dim(` +${formatTokens(ctx.contextDelta)}`)
         : '';
     let compactStr = '';
     if (ctx.compactionEvent) {
@@ -31,8 +31,8 @@ export function renderIdentityLine(ctx) {
         }
     }
     let line = display?.showContextBar !== false
-        ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${velocityStr}${compactStr}`
-        : `${dim('Context')} ${contextValueDisplay}${velocityStr}${compactStr}`;
+        ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${deltaStr}${compactStr}`
+        : `${dim('Context')} ${contextValueDisplay}${deltaStr}${compactStr}`;
     if (display?.showTokenBreakdown !== false && percent >= 85) {
         const usage = ctx.stdin.context_window?.current_usage;
         if (usage) {
