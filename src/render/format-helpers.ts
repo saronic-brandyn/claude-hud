@@ -17,7 +17,7 @@ export function formatContextValue(ctx: RenderContext, percent: number, mode: 'p
     const totalTokens = getTotalTokens(ctx.stdin);
     const size = ctx.stdin.context_window?.context_window_size ?? 0;
     if (size > 0) {
-      return `${formatTokens(totalTokens)}/${formatTokens(size)}`;
+      return `${formatTokens(totalTokens)}/${formatTokens(size)} (${percent}%)`;
     }
     return formatTokens(totalTokens);
   }
