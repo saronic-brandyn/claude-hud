@@ -6,6 +6,8 @@ import { getGitStatus } from './git.js';
 import { getUsage } from './usage-api.js';
 import { loadConfig } from './config.js';
 import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
+import { getContextVelocity } from './context-velocity.js';
+import { calculateCost } from './pricing.js';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 export async function main(overrides = {}) {
@@ -35,24 +37,46 @@ export async function main(overrides = {}) {
             return;
         }
         const transcriptPath = stdin.transcript_path ?? '';
-        const transcript = await deps.parseTranscript(transcriptPath);
-        const { claudeMdCount, rulesCount, mcpCount, hooksCount } = await deps.countConfigs(stdin.cwd);
         const config = await deps.loadConfig();
-        const gitStatus = config.gitStatus.enabled
-            ? await deps.getGitStatus(stdin.cwd)
-            : null;
-        // Only fetch usage if enabled in config (replaces env var requirement)
-        const usageData = config.display.showUsage !== false
-            ? await deps.getUsage({
-                ttls: {
-                    cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
-                    failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
-                },
-            })
-            : null;
+        const [transcript, configCounts, gitStatus, usageData] = await Promise.all([
+            deps.parseTranscript(transcriptPath),
+            deps.countConfigs(stdin.cwd),
+            config.gitStatus.enabled
+                ? deps.getGitStatus(stdin.cwd)
+                : Promise.resolve(null),
+            config.display.showUsage !== false
+                ? deps.getUsage({
+                    ttls: {
+                        cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
+                        failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
+                    },
+                })
+                : Promise.resolve(null),
+        ]);
+        const { claudeMdCount, rulesCount, mcpCount, hooksCount } = configCounts;
         const extraCmd = deps.parseExtraCmdArg();
         const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;
         const sessionDuration = formatSessionDuration(transcript.sessionStart, deps.now);
+        const contextVelocity = getContextVelocity(stdin);
+        // Compute cost estimation
+        let costData = null;
+        if (config.display.showCost !== false) {
+            const usage = stdin.context_window?.current_usage;
+            if (usage) {
+                const modelId = stdin.model?.id ?? stdin.model?.display_name ?? 'opus';
+                const tokens = {
+                    inputTokens: usage.input_tokens ?? 0,
+                    outputTokens: usage.output_tokens ?? 0,
+                    cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+                    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+                    totalCost: 0,
+                    byModel: [{ model: modelId, inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0, cacheWriteTokens: usage.cache_creation_input_tokens ?? 0, cacheReadTokens: usage.cache_read_input_tokens ?? 0 }],
+                };
+                const estimate = calculateCost(tokens);
+                tokens.totalCost = estimate.totalCost;
+                costData = tokens;
+            }
+        }
         const ctx = {
             stdin,
             transcript,
@@ -65,6 +89,8 @@ export async function main(overrides = {}) {
             usageData,
             config,
             extraLabel,
+            contextVelocity,
+            costData,
         };
         deps.render(ctx);
     }

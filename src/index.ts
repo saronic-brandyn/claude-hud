@@ -7,6 +7,8 @@ import { getUsage } from './usage-api.js';
 import { loadConfig } from './config.js';
 import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
 import { getContextVelocity } from './context-velocity.js';
+import { detectCompaction } from './compaction-detector.js';
+import { getContextPercent, getBufferedPercent } from './stdin.js';
 import type { RenderContext } from './types.js';
 import type { CumulativeTokenUsage } from './pricing.js';
 import { calculateCost } from './pricing.js';
@@ -118,6 +120,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       config,
       extraLabel,
       contextVelocity,
+      costData,
     };
 
     deps.render(ctx);

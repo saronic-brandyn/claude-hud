@@ -5,18 +5,21 @@ export function renderAgentsLine(ctx) {
     const recentCompleted = agents
         .filter((a) => a.status === 'completed')
         .slice(-2);
+    const ascii = ctx.config?.display?.asciiMode ?? false;
     const toShow = [...runningAgents, ...recentCompleted].slice(-3);
     if (toShow.length === 0) {
         return null;
     }
     const lines = [];
     for (const agent of toShow) {
-        lines.push(formatAgent(agent));
+        lines.push(formatAgent(agent, ascii));
     }
     return lines.join('\n');
 }
-function formatAgent(agent) {
-    const statusIcon = agent.status === 'running' ? yellow('◐') : green('✓');
+function formatAgent(agent, ascii = false) {
+    const symRunning = ascii ? '~' : '◐';
+    const symDone = ascii ? '+' : '✓';
+    const statusIcon = agent.status === 'running' ? yellow(symRunning) : green(symDone);
     const type = magenta(agent.type);
     const model = agent.model ? dim(`[${agent.model}]`) : '';
     const desc = agent.description ? dim(`: ${truncateDesc(agent.description)}`) : '';

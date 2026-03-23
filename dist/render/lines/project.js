@@ -3,6 +3,9 @@ import { getOutputSpeed } from '../../speed-tracker.js';
 import { cyan, dim, magenta, yellow, red, claudeOrange } from '../colors.js';
 export function renderProjectLine(ctx) {
     const display = ctx.config?.display;
+    const ascii = display?.asciiMode ?? false;
+    const symDeleted = ascii ? 'x' : '✘';
+    const symDuration = ascii ? 'T:' : '⏱️ ';
     const parts = [];
     if (display?.showModel !== false) {
         const model = getModelName(ctx.stdin);
@@ -17,7 +20,9 @@ export function renderProjectLine(ctx) {
     }
     let projectPart = null;
     if (display?.showProject !== false && ctx.stdin.cwd) {
-        const segments = ctx.stdin.cwd.split(/[/\\]/).filter(Boolean);
+        // Use main repo root when in a worktree, otherwise use cwd
+        const displayPath = ctx.gitStatus?.mainRepoPath ?? ctx.stdin.cwd;
+        const segments = displayPath.split(/[/\\]/).filter(Boolean);
         const pathLevels = ctx.config?.pathLevels ?? 1;
         const projectPath = segments.length > 0 ? segments.slice(-pathLevels).join('/') : '/';
         projectPart = yellow(projectPath);
@@ -46,7 +51,7 @@ export function renderProjectLine(ctx) {
             if (added > 0)
                 statParts.push(`+${added}`);
             if (deleted > 0)
-                statParts.push(`✘${deleted}`);
+                statParts.push(`${symDeleted}${deleted}`);
             if (untracked > 0)
                 statParts.push(`?${untracked}`);
             if (statParts.length > 0) {
@@ -77,7 +82,7 @@ export function renderProjectLine(ctx) {
         }
     }
     if (display?.showDuration !== false && ctx.sessionDuration) {
-        parts.push(dim(`⏱️  ${ctx.sessionDuration}`));
+        parts.push(dim(`${symDuration} ${ctx.sessionDuration}`));
     }
     const customLine = display?.customLine;
     if (customLine) {

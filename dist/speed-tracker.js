@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { getHudPluginDir } from './claude-config-dir.js';
+import { atomicWriteFileSync } from './atomic-write.js';
 const SPEED_WINDOW_MS = 2000;
 const defaultDeps = {
     homeDir: () => os.homedir(),
@@ -33,7 +34,7 @@ function writeCache(homeDir, cache) {
         if (!fs.existsSync(cacheDir)) {
             fs.mkdirSync(cacheDir, { recursive: true });
         }
-        fs.writeFileSync(cachePath, JSON.stringify(cache), 'utf8');
+        atomicWriteFileSync(cachePath, JSON.stringify(cache));
     }
     catch {
         // Ignore cache write failures

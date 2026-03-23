@@ -13,4 +13,6 @@ export declare function getContextColor(percent: number, colors?: Partial<HudCol
 export declare function getQuotaColor(percent: number, colors?: Partial<HudColorOverrides>): string;
 export declare function quotaBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
 export declare function coloredBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
+export declare function quotaBarAscii(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
+export declare function coloredBarAscii(percent: number, width?: number, colors?: Partial<HudColorOverrides>): string;
 //# sourceMappingURL=colors.d.ts.map

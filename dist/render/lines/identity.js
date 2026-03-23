@@ -1,6 +1,7 @@
-import { getContextPercent, getBufferedPercent, getTotalTokens } from '../../stdin.js';
-import { coloredBar, dim, getContextColor, RESET } from '../colors.js';
+import { getContextPercent, getBufferedPercent } from '../../stdin.js';
+import { coloredBar, coloredBarAscii, dim, getContextColor, RESET } from '../colors.js';
 import { getAdaptiveBarWidth } from '../../utils/terminal.js';
+import { formatTokens, formatContextValue } from '../format-helpers.js';
 const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG === '*';
 export function renderIdentityLine(ctx) {
     const rawPercent = getContextPercent(ctx.stdin);
@@ -15,9 +16,14 @@ export function renderIdentityLine(ctx) {
     const contextValueMode = display?.contextValue ?? 'percent';
     const contextValue = formatContextValue(ctx, percent, contextValueMode);
     const contextValueDisplay = `${getContextColor(percent, colors)}${contextValue}${RESET}`;
+    const ascii = display?.asciiMode ?? false;
+    const barFn = ascii ? coloredBarAscii : coloredBar;
+    const velocityStr = ctx.contextVelocity
+        ? dim(` (+${formatTokens(ctx.contextVelocity)}/min)`)
+        : '';
     let line = display?.showContextBar !== false
-        ? `${dim('Context')} ${coloredBar(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}`
-        : `${dim('Context')} ${contextValueDisplay}`;
+        ? `${dim('Context')} ${barFn(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}${velocityStr}`
+        : `${dim('Context')} ${contextValueDisplay}${velocityStr}`;
     if (display?.showTokenBreakdown !== false && percent >= 85) {
         const usage = ctx.stdin.context_window?.current_usage;
         if (usage) {
@@ -27,28 +33,5 @@ export function renderIdentityLine(ctx) {
         }
     }
     return line;
-}
-function formatTokens(n) {
-    if (n >= 1000000) {
-        return `${(n / 1000000).toFixed(1)}M`;
-    }
-    if (n >= 1000) {
-        return `${(n / 1000).toFixed(0)}k`;
-    }
-    return n.toString();
-}
-function formatContextValue(ctx, percent, mode) {
-    if (mode === 'tokens') {
-        const totalTokens = getTotalTokens(ctx.stdin);
-        const size = ctx.stdin.context_window?.context_window_size ?? 0;
-        if (size > 0) {
-            return `${formatTokens(totalTokens)}/${formatTokens(size)}`;
-        }
-        return formatTokens(totalTokens);
-    }
-    if (mode === 'remaining') {
-        return `${Math.max(0, 100 - percent)}%`;
-    }
-    return `${percent}%`;
 }
 //# sourceMappingURL=identity.js.map

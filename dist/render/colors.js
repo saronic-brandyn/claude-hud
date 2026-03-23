@@ -100,4 +100,20 @@ export function coloredBar(percent, width = 10, colors) {
     const color = getContextColor(safePercent, colors);
     return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
 }
+export function quotaBarAscii(percent, width = 10, colors) {
+    const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+    const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+    const filled = Math.round((safePercent / 100) * safeWidth);
+    const empty = safeWidth - filled;
+    const color = getQuotaColor(safePercent, colors);
+    return `${color}${'#'.repeat(filled)}${DIM}${'-'.repeat(empty)}${RESET}`;
+}
+export function coloredBarAscii(percent, width = 10, colors) {
+    const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+    const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+    const filled = Math.round((safePercent / 100) * safeWidth);
+    const empty = safeWidth - filled;
+    const color = getContextColor(safePercent, colors);
+    return `${color}${'#'.repeat(filled)}${DIM}${'-'.repeat(empty)}${RESET}`;
+}
 //# sourceMappingURL=colors.js.map

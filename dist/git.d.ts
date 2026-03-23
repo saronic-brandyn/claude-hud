@@ -10,6 +10,8 @@ export interface GitStatus {
     ahead: number;
     behind: number;
     fileStats?: FileStats;
+    /** Set when cwd is a linked worktree; contains the main repo root path */
+    mainRepoPath?: string;
 }
 export declare function getGitBranch(cwd?: string): Promise<string | null>;
 export declare function getGitStatus(cwd?: string): Promise<GitStatus | null>;

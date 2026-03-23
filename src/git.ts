@@ -16,6 +16,8 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   fileStats?: FileStats;
+  /** Set when cwd is a linked worktree; contains the main repo root path */
+  mainRepoPath?: string;
 }
 
 export async function getGitBranch(cwd?: string): Promise<string | null> {
@@ -82,7 +84,28 @@ export async function getGitStatus(cwd?: string): Promise<GitStatus | null> {
       // No upstream or error, keep 0/0
     }
 
-    return { branch, isDirty, ahead, behind, fileStats };
+    // Detect linked worktree: --git-dir returns an absolute path (not ".git") in a worktree
+    let mainRepoPath: string | undefined;
+    try {
+      const { stdout: gitDirOut } = await execFileAsync(
+        'git', ['rev-parse', '--git-dir'],
+        { cwd, timeout: 1000, encoding: 'utf8' }
+      );
+      const gitDir = gitDirOut.trim();
+      if (gitDir !== '.git' && gitDir.includes('.git/worktrees/')) {
+        const { stdout: commonDirOut } = await execFileAsync(
+          'git', ['rev-parse', '--git-common-dir'],
+          { cwd, timeout: 1000, encoding: 'utf8' }
+        );
+        const commonDir = commonDirOut.trim();
+        const { dirname } = await import('node:path');
+        mainRepoPath = dirname(commonDir);
+      }
+    } catch {
+      // Not a worktree or unsupported, ignore
+    }
+
+    return { branch, isDirty, ahead, behind, fileStats, mainRepoPath };
   } catch {
     return null;
   }

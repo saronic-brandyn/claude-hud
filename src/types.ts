@@ -89,4 +89,5 @@ export interface RenderContext {
   config: HudConfig;
   extraLabel: string | null;
   contextVelocity: number | null;
+  costData: CumulativeTokenUsage | null;
 }

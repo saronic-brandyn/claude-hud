@@ -49,7 +49,22 @@ export async function getGitStatus(cwd) {
         catch {
             // No upstream or error, keep 0/0
         }
-        return { branch, isDirty, ahead, behind, fileStats };
+        // Detect linked worktree: --git-dir returns an absolute path (not ".git") in a worktree
+        let mainRepoPath;
+        try {
+            const { stdout: gitDirOut } = await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd, timeout: 1000, encoding: 'utf8' });
+            const gitDir = gitDirOut.trim();
+            if (gitDir !== '.git' && gitDir.includes('.git/worktrees/')) {
+                const { stdout: commonDirOut } = await execFileAsync('git', ['rev-parse', '--git-common-dir'], { cwd, timeout: 1000, encoding: 'utf8' });
+                const commonDir = commonDirOut.trim();
+                const { dirname } = await import('node:path');
+                mainRepoPath = dirname(commonDir);
+            }
+        }
+        catch {
+            // Not a worktree or unsupported, ignore
+        }
+        return { branch, isDirty, ahead, behind, fileStats, mainRepoPath };
     }
     catch {
         return null;
