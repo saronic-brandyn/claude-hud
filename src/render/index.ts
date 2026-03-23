@@ -12,7 +12,7 @@ import {
   renderUsageLine,
   renderCostLine,
 } from './lines/index.js';
-import { dim, RESET } from './colors.js';
+import { dim, RESET, initColors } from './colors.js';
 
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_PATTERN = /^\x1b\[[0-9;]*m/;
@@ -419,6 +419,7 @@ function renderExpanded(ctx: RenderContext): Array<{ line: string; isActivity: b
 }
 
 export function render(ctx: RenderContext): void {
+  initColors(ctx.config?.colors);
   const lineLayout = ctx.config?.lineLayout ?? 'expanded';
   const showSeparators = ctx.config?.showSeparators ?? false;
   const terminalWidth = getTerminalWidth();

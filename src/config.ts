@@ -21,6 +21,7 @@ export type HudColorName =
 export type HudColorValue = HudColorName | number | string;
 
 export interface HudColorOverrides {
+  dim: HudColorValue;
   context: HudColorValue;
   usage: HudColorValue;
   warning: HudColorValue;
@@ -127,6 +128,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     failureCacheTtlSeconds: 15,
   },
   colors: {
+    dim: 245,
     context: 'green',
     usage: 'brightBlue',
     warning: 'yellow',
@@ -353,6 +355,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
   };
 
   const colors = {
+    dim: validateColorValue(migrated.colors?.dim)
+      ? migrated.colors.dim
+      : DEFAULT_CONFIG.colors.dim,
     context: validateColorValue(migrated.colors?.context)
       ? migrated.colors.context
       : DEFAULT_CONFIG.colors.context,
