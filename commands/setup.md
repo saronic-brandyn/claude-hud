@@ -100,8 +100,8 @@ This is a [Claude Code platform limitation](https://github.com/anthropics/claude
 |----------|-------|----------------|
 | `darwin` | any | bash (macOS instructions) |
 | `linux` | any | bash (Linux instructions) |
-| `win32` | `bash` (Git Bash, MSYS2) | bash (use macOS/Linux instructions) |
-| `win32` | `powershell`, `pwsh`, or `cmd` | PowerShell (use Windows instructions) |
+| `win32` | `bash` (Git Bash, MSYS2) | bash — use macOS/Linux instructions. **NEVER use PowerShell commands with bash shell.** |
+| `win32` | `powershell`, `pwsh`, or `cmd` | PowerShell (use Windows + PowerShell instructions) |
 
 ---
 
@@ -137,12 +137,11 @@ This is a [Claude Code platform limitation](https://github.com/anthropics/claude
    bash -c 'plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/claude-hud/claude-hud/*/ 2>/dev/null | awk -F/ '"'"'{ print $(NF-1) "\t" $0 }'"'"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec "{RUNTIME_PATH}" "${plugin_dir}{SOURCE}"'
    ```
 
-**Windows** (Platform: `win32`):
+**Windows + Git Bash** (Platform: `win32`, Shell: `bash`):
 
-Choose instructions by `Shell:` value before running any commands:
-- `Shell: bash` -> use the macOS/Linux section above (same command format).
-- `Shell: powershell`, `pwsh`, or `cmd` -> use the Windows PowerShell section below.
-- Any other shell value -> stop and ask the user which shell launched Claude Code.
+**IMPORTANT**: This is the most common Windows configuration. Use the macOS/Linux bash instructions above — same detection commands, same command format. Do NOT use PowerShell commands when the shell is bash. Claude Code invokes statusline commands through bash, which interprets `$env` and `$p` as empty shell variables before PowerShell ever sees them, breaking the command silently.
+
+**Windows + PowerShell** (Platform: `win32`, Shell: `powershell`, `pwsh`, or `cmd`):
 
 1. Get plugin path:
    ```powershell
