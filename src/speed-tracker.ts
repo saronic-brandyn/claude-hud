@@ -66,9 +66,10 @@ export function getOutputSpeed(stdin: StdinData, overrides: Partial<SpeedTracker
 }
 
 export function getTokenSpeed(stdin: StdinData, overrides: Partial<SpeedTrackerDeps> = {}): TokenSpeed | null {
-  const usage = stdin.context_window?.current_usage;
-  const inputTokens = usage?.input_tokens;
-  const outputTokens = usage?.output_tokens;
+  // Prefer cumulative totals (never drop on compaction) over current_usage (context window, drops)
+  const cw = stdin.context_window;
+  const outputTokens = cw?.total_output_tokens ?? cw?.current_usage?.output_tokens;
+  const inputTokens = cw?.total_input_tokens ?? cw?.current_usage?.input_tokens;
   if (typeof outputTokens !== 'number' || !Number.isFinite(outputTokens)) {
     return null;
   }

@@ -75,9 +75,10 @@ export function renderSessionLine(ctx: RenderContext): string {
 
   // Project path + git status (SECOND)
   let projectPart: string | null = null;
-  if (display?.showProject !== false && ctx.stdin.cwd) {
+  const projectDir = ctx.stdin.workspace?.project_dir ?? ctx.stdin.workspace?.current_dir ?? ctx.stdin.cwd;
+  if (display?.showProject !== false && projectDir) {
     // Split by both Unix (/) and Windows (\) separators for cross-platform support
-    const segments = ctx.stdin.cwd.split(/[/\\]/).filter(Boolean);
+    const segments = projectDir.split(/[/\\]/).filter(Boolean);
     const pathLevels = ctx.config?.pathLevels ?? 1;
     // Always join with forward slash for consistent display
     // Handle root path (/) which results in empty segments
