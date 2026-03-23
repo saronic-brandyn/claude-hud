@@ -15,21 +15,10 @@ function getCostColor(cost: number): string {
   return '\x1b[2m';                     // dim
 }
 
-function parseDurationMinutes(duration: string): number | null {
-  if (!duration || duration === '<1m') return null;
-  const hourMatch = duration.match(/(\d+)h/);
-  const minMatch = duration.match(/(\d+)m/);
-  const hours = hourMatch ? parseInt(hourMatch[1], 10) : 0;
-  const mins = minMatch ? parseInt(minMatch[1], 10) : 0;
-  const total = hours * 60 + mins;
-  return total > 0 ? total : null;
-}
-
-function getBurnRate(cost: number, duration: string): string | null {
-  const mins = parseDurationMinutes(duration);
-  if (!mins || mins < 1 || cost <= 0) return null;
-  const perHour = cost / (mins / 60);
-  return formatCost(perHour);
+function getBurnRate(cost: number, durationMs: number | undefined): string | null {
+  if (!durationMs || durationMs < 60_000 || cost <= 0) return null;
+  const hours = durationMs / 3_600_000;
+  return formatCost(cost / hours);
 }
 
 /** Expanded layout: "Cost $1.42 ($0.85/hr)" with optional lines changed */
@@ -40,18 +29,16 @@ export function renderCostLine(ctx: RenderContext): string | null {
 
   const color = getCostColor(cost);
   const costStr = formatCost(cost);
-  const burn = getBurnRate(cost, ctx.sessionDuration);
+  const burn = getBurnRate(cost, data?.total_duration_ms);
   const burnStr = burn ? ` ${dim(`(${burn}/hr)`)}` : '';
   let result = `${dim('Cost')} ${color}${costStr}${RESET}${burnStr}`;
 
   if (ctx.config?.display?.showCostBreakdown) {
-    const added = data?.total_lines_added;
-    const removed = data?.total_lines_removed;
-    if (added || removed) {
-      const parts: string[] = [];
-      if (added) parts.push(`+${added}`);
-      if (removed) parts.push(`-${removed}`);
-      result += dim(` (${parts.join(' ')})`);
+    // Show token counts (lines changed is already on the project line)
+    const inTokens = ctx.stdin.context_window?.total_input_tokens;
+    const outTokens = ctx.stdin.context_window?.total_output_tokens;
+    if (inTokens || outTokens) {
+      result += dim(` (in: ${formatTokens(inTokens ?? 0)}, out: ${formatTokens(outTokens ?? 0)})`);
     }
   }
 
@@ -65,7 +52,7 @@ export function renderCostSegment(ctx: RenderContext): string | null {
   if (cost == null || cost <= 0) return null;
 
   const color = getCostColor(cost);
-  const burn = getBurnRate(cost, ctx.sessionDuration);
+  const burn = getBurnRate(cost, data?.total_duration_ms);
   const burnStr = burn ? dim(` ${burn}/hr`) : '';
   return `${color}${formatCost(cost)}${RESET}${burnStr}`;
 }

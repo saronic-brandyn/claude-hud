@@ -28,6 +28,15 @@ export type MainDeps = {
 };
 
 
+function formatDurationMs(ms: number): string {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return '<1m';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return `${hours}h ${remainingMins}m`;
+}
+
 function parseNativeRateLimits(stdin: StdinData): UsageData | null {
   const rl = stdin.rate_limits;
   if (!rl?.five_hour && !rl?.seven_day) return null;
@@ -88,12 +97,25 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
         ? deps.getGitStatus(stdin.cwd)
         : Promise.resolve(null),
       config.display.showUsage !== false
-        ? (parseNativeRateLimits(stdin) ?? deps.getUsage({
-            ttls: {
-              cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
-              failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
-            },
-          }))
+        ? (async () => {
+            const native = parseNativeRateLimits(stdin);
+            if (native) {
+              // Native rate_limits lack planName — try to read from credentials
+              const creds = await deps.getUsage({
+                ttls: { cacheTtlMs: 300_000, failureCacheTtlMs: 60_000 },
+              });
+              if (creds?.planName) {
+                native.planName = creds.planName;
+              }
+              return native;
+            }
+            return deps.getUsage({
+              ttls: {
+                cacheTtlMs: config.usage.cacheTtlSeconds * 1000,
+                failureCacheTtlMs: config.usage.failureCacheTtlSeconds * 1000,
+              },
+            });
+          })()
         : Promise.resolve(null),
     ]);
 
@@ -102,7 +124,11 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     const extraCmd = deps.parseExtraCmdArg();
     const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;
 
-    const sessionDuration = formatSessionDuration(transcript.sessionStart, deps.now);
+    // Prefer native duration from stdin (exact), fall back to transcript timestamp
+    const nativeDurationMs = stdin.cost?.total_duration_ms;
+    const sessionDuration = nativeDurationMs && nativeDurationMs > 0
+      ? formatDurationMs(nativeDurationMs)
+      : formatSessionDuration(transcript.sessionStart, deps.now);
 
     const contextVelocity = getContextVelocity(stdin);
 
