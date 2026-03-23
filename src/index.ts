@@ -8,6 +8,7 @@ import { loadConfig } from './config.js';
 import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
 import { getContextVelocity } from './context-velocity.js';
 import { detectCompaction } from './compaction-detector.js';
+import { getQueryCost } from './query-cost.js';
 import { getContextPercent, getBufferedPercent } from './stdin.js';
 import type { RenderContext, StdinData, UsageData } from './types.js';
 import { fileURLToPath } from 'node:url';
@@ -140,6 +141,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
 
     // Use native cost data from stdin (Claude Code provides exact cumulative cost)
     const costData = (config.display.showCost !== false && stdin.cost) ? stdin.cost : null;
+    const queryCost = costData ? getQueryCost(costData.total_cost_usd) : null;
 
     const ctx: RenderContext = {
       stdin,
@@ -156,6 +158,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       contextVelocity,
       compactionEvent,
       costData,
+      queryCost,
     };
 
     deps.render(ctx);

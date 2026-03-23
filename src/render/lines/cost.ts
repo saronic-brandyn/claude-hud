@@ -31,7 +31,8 @@ export function renderCostLine(ctx: RenderContext): string | null {
   const costStr = formatCost(cost);
   const burn = getBurnRate(cost, data?.total_duration_ms);
   const burnStr = burn ? ` ${dim(`(${burn}/hr)`)}` : '';
-  let result = `${dim('Cost')} ${color}${costStr}${RESET}${burnStr}`;
+  const queryStr = formatQueryCost(ctx);
+  let result = `${dim('Cost')} ${color}${costStr}${RESET}${queryStr}${burnStr}`;
 
   if (ctx.config?.display?.showCostBreakdown) {
     // Show token counts (lines changed is already on the project line)
@@ -45,6 +46,13 @@ export function renderCostLine(ctx: RenderContext): string | null {
   return result;
 }
 
+function formatQueryCost(ctx: RenderContext): string {
+  const qc = ctx.queryCost;
+  if (!qc || qc.cost < 0.001) return '';
+  const label = qc.cost < 0.01 ? '<$0.01' : `$${qc.cost.toFixed(2)}`;
+  return dim(` (+${label})`);
+}
+
 /** Compact layout: "$1.42 $0.85/hr" inline segment */
 export function renderCostSegment(ctx: RenderContext): string | null {
   const data = ctx.costData;
@@ -52,7 +60,8 @@ export function renderCostSegment(ctx: RenderContext): string | null {
   if (cost == null || cost <= 0) return null;
 
   const color = getCostColor(cost);
+  const queryStr = formatQueryCost(ctx);
   const burn = getBurnRate(cost, data?.total_duration_ms);
   const burnStr = burn ? dim(` ${burn}/hr`) : '';
-  return `${color}${formatCost(cost)}${RESET}${burnStr}`;
+  return `${color}${formatCost(cost)}${RESET}${queryStr}${burnStr}`;
 }
