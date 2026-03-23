@@ -105,6 +105,7 @@ export interface RenderContext {
     config: HudConfig;
     extraLabel: string | null;
     contextVelocity: number | null;
+    contextDelta: number | null;
     compactionEvent: CompactionEvent | null;
     costData: StdinData['cost'] | null;
     queryCost: {

@@ -7,5 +7,9 @@ export type VelocityDeps = {
  * Calculate context token velocity in tokens/minute.
  * Returns null if insufficient data or velocity below display threshold.
  */
-export declare function getContextVelocity(stdin: StdinData, overrides?: Partial<VelocityDeps>): number | null;
+export interface VelocityResult {
+    velocity: number | null;
+    delta: number | null;
+}
+export declare function getContextVelocity(stdin: StdinData, overrides?: Partial<VelocityDeps>): VelocityResult;
 //# sourceMappingURL=context-velocity.d.ts.map

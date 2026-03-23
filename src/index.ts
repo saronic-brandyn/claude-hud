@@ -131,7 +131,9 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       ? formatDurationMs(nativeDurationMs)
       : formatSessionDuration(transcript.sessionStart, deps.now);
 
-    const contextVelocity = getContextVelocity(stdin);
+    const velocityResult = getContextVelocity(stdin);
+    const contextVelocity = velocityResult.velocity;
+    const contextDelta = velocityResult.delta;
 
     const autocompactMode = config.display?.autocompactBuffer ?? 'enabled';
     const percent = autocompactMode === 'disabled'
@@ -156,6 +158,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       config,
       extraLabel,
       contextVelocity,
+      contextDelta,
       compactionEvent,
       costData,
       queryCost,

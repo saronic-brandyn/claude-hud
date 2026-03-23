@@ -46,14 +46,10 @@ function writeCache(homeDir, cache) {
         // Ignore cache write failures
     }
 }
-/**
- * Calculate context token velocity in tokens/minute.
- * Returns null if insufficient data or velocity below display threshold.
- */
 export function getContextVelocity(stdin, overrides = {}) {
     const totalTokens = getTotalTokens(stdin);
     if (totalTokens <= 0)
-        return null;
+        return { velocity: null, delta: null };
     const deps = { ...defaultDeps, ...overrides };
     const now = deps.now();
     const homeDir = deps.homeDir();
@@ -61,14 +57,16 @@ export function getContextVelocity(stdin, overrides = {}) {
     // Always update cache with current state
     writeCache(homeDir, { totalTokens, timestamp: now });
     if (!previous)
-        return null;
+        return { velocity: null, delta: null };
     const deltaTokens = totalTokens - previous.totalTokens;
     const deltaMs = now - previous.timestamp;
-    // Need a reasonable window and positive growth
+    const delta = deltaTokens > 0 ? deltaTokens : null;
+    // Need a reasonable window and positive growth for velocity
     if (deltaTokens <= 0 || deltaMs < MIN_WINDOW_MS || deltaMs > MAX_WINDOW_MS) {
-        return null;
+        return { velocity: null, delta };
     }
     const tokensPerMin = (deltaTokens / deltaMs) * 60_000;
-    return tokensPerMin >= MIN_DISPLAY_VELOCITY ? Math.round(tokensPerMin) : null;
+    const velocity = tokensPerMin >= MIN_DISPLAY_VELOCITY ? Math.round(tokensPerMin) : null;
+    return { velocity, delta };
 }
 //# sourceMappingURL=context-velocity.js.map
