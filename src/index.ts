@@ -9,6 +9,7 @@ import { parseExtraCmdArg, runExtraCmd } from './extra-cmd.js';
 import { getContextVelocity } from './context-velocity.js';
 import { detectCompaction } from './compaction-detector.js';
 import { getQueryCost } from './query-cost.js';
+import { getActionCosts } from './action-cost.js';
 import { getContextPercent, getBufferedPercent } from './stdin.js';
 import type { RenderContext, StdinData, UsageData } from './types.js';
 import { fileURLToPath } from 'node:url';
@@ -145,6 +146,16 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     const costData = (config.display.showCost !== false && stdin.cost) ? stdin.cost : null;
     const queryCost = costData ? getQueryCost(costData.total_cost_usd) : null;
 
+    // Track cost attribution by tool type
+    const actionCosts = (costData && config.display.showCostByAction)
+      ? getActionCosts(
+          costData.total_cost_usd,
+          transcript.tools,
+          transcript.agents,
+          config.display.costByActionThreshold,
+        )
+      : null;
+
     const ctx: RenderContext = {
       stdin,
       transcript,
@@ -162,6 +173,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       compactionEvent,
       costData,
       queryCost,
+      actionCosts,
     };
 
     deps.render(ctx);

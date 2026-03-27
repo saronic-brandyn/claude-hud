@@ -42,6 +42,9 @@ export const DEFAULT_CONFIG = {
         asciiMode: false,
         showCost: true,
         showCostBreakdown: false,
+        showCostByAction: false,
+        costByActionThreshold: 1.00,
+        showEffort: true,
         showLinesChanged: true,
         autocompactBuffer: 'enabled',
         usageThreshold: 0,
@@ -233,6 +236,15 @@ export function mergeConfig(userConfig) {
         showCostBreakdown: typeof migrated.display?.showCostBreakdown === 'boolean'
             ? migrated.display.showCostBreakdown
             : DEFAULT_CONFIG.display.showCostBreakdown,
+        showCostByAction: typeof migrated.display?.showCostByAction === 'boolean'
+            ? migrated.display.showCostByAction
+            : DEFAULT_CONFIG.display.showCostByAction,
+        costByActionThreshold: typeof migrated.display?.costByActionThreshold === 'number'
+            ? Math.max(0, migrated.display.costByActionThreshold)
+            : DEFAULT_CONFIG.display.costByActionThreshold,
+        showEffort: typeof migrated.display?.showEffort === 'boolean'
+            ? migrated.display.showEffort
+            : DEFAULT_CONFIG.display.showEffort,
         showLinesChanged: typeof migrated.display?.showLinesChanged === 'boolean'
             ? migrated.display.showLinesChanged
             : DEFAULT_CONFIG.display.showLinesChanged,

@@ -1,34 +1,21 @@
-import { yellow, green, cyan, dim } from './colors.js';
+import { yellow, cyan, dim } from './colors.js';
 export function renderToolsLine(ctx) {
     const { tools } = ctx.transcript;
-    if (tools.length === 0) {
+    const runningTools = tools.filter((t) => t.status === 'running');
+    if (runningTools.length === 0) {
         return null;
     }
     const ascii = ctx.config?.display?.asciiMode ?? false;
     const symRunning = ascii ? '~' : '◐';
-    const symDone = ascii ? '+' : '✓';
     const parts = [];
-    const runningTools = tools.filter((t) => t.status === 'running');
-    const completedTools = tools.filter((t) => t.status === 'completed' || t.status === 'error');
-    for (const tool of runningTools.slice(-2)) {
+    for (const tool of runningTools.slice(-3)) {
         const target = tool.target ? truncatePath(tool.target) : '';
         const elapsed = Date.now() - tool.startTime.getTime();
         const elapsedStr = elapsed > 5000 ? ` ${dim(`(${formatElapsed(elapsed)})`)}` : '';
         parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}${elapsedStr}`);
     }
-    const toolCounts = new Map();
-    for (const tool of completedTools) {
-        const count = toolCounts.get(tool.name) ?? 0;
-        toolCounts.set(tool.name, count + 1);
-    }
-    const sortedTools = Array.from(toolCounts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 4);
-    for (const [name, count] of sortedTools) {
-        parts.push(`${green(symDone)} ${name} ${dim(`×${count}`)}`);
-    }
-    if (parts.length === 0) {
-        return null;
+    if (runningTools.length > 3) {
+        parts.push(dim(`+${runningTools.length - 3} more`));
     }
     return parts.join(' | ');
 }

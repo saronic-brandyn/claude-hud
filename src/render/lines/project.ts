@@ -19,7 +19,14 @@ export function renderProjectLine(ctx: RenderContext): string | null {
     const billingLabel = showUsage ? (planName ?? (hasApiKey ? red('API') : undefined)) : undefined;
     const planDisplay = providerLabel ?? billingLabel;
     const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
-    parts.push(cyan(`[${modelDisplay}]`));
+
+    // Append effort level if available and enabled
+    const effort = (display?.showEffort !== false) ? ctx.stdin.effort : undefined;
+    const effortDisplay = effort && effort !== 'high'
+      ? `${modelDisplay} | ${dim(effort)}`
+      : modelDisplay;
+
+    parts.push(cyan(`[${effortDisplay}]`));
   }
 
   let projectPart: string | null = null;

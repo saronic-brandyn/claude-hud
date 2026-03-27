@@ -43,6 +43,14 @@ export function renderCostLine(ctx: RenderContext): string | null {
     }
   }
 
+  if (ctx.config?.display?.showCostByAction && ctx.actionCosts?.length) {
+    const parts = ctx.actionCosts.slice(0, 5).map(e => {
+      const c = getCostColor(e.totalCost);
+      return `${c}${e.toolType}${RESET} ${dim(formatCost(e.totalCost))}`;
+    });
+    result += ` ${dim('│')} ${parts.join(dim(' · '))}`;
+  }
+
   return result;
 }
 

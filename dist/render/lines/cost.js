@@ -42,6 +42,13 @@ export function renderCostLine(ctx) {
             result += dim(` (in: ${formatTokens(inTokens ?? 0)}, out: ${formatTokens(outTokens ?? 0)})`);
         }
     }
+    if (ctx.config?.display?.showCostByAction && ctx.actionCosts?.length) {
+        const parts = ctx.actionCosts.slice(0, 5).map(e => {
+            const c = getCostColor(e.totalCost);
+            return `${c}${e.toolType}${RESET} ${dim(formatCost(e.totalCost))}`;
+        });
+        result += ` ${dim('│')} ${parts.join(dim(' · '))}`;
+    }
     return result;
 }
 function formatQueryCost(ctx) {

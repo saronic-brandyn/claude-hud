@@ -1,6 +1,7 @@
 import type { HudConfig } from './config.js';
 import type { CompactionEvent } from './compaction-detector.js';
 import type { GitStatus } from './git.js';
+import type { ActionCostEntry } from './action-cost.js';
 
 export interface StdinData {
   session_id?: string;
@@ -18,6 +19,7 @@ export interface StdinData {
   output_style?: {
     name?: string;
   };
+  effort?: string;
   cost?: {
     total_cost_usd?: number;
     total_duration_ms?: number;
@@ -101,6 +103,8 @@ export interface TranscriptData {
   todos: TodoItem[];
   sessionStart?: Date;
   sessionName?: string;
+  /** MCP servers that had at least one tool_result with is_error */
+  mcpErrors: Set<string>;
 }
 
 export interface RenderContext {
@@ -120,4 +124,5 @@ export interface RenderContext {
   compactionEvent: CompactionEvent | null;
   costData: StdinData['cost'] | null;
   queryCost: { cost: number; isActive: boolean } | null;
+  actionCosts: ActionCostEntry[] | null;
 }
