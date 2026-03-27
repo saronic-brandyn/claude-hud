@@ -43,6 +43,9 @@ export interface HudConfig {
         asciiMode: boolean;
         showCost: boolean;
         showCostBreakdown: boolean;
+        showCostByAction: boolean;
+        costByActionThreshold: number;
+        showEffort: boolean;
         showLinesChanged: boolean;
         autocompactBuffer: AutocompactBufferMode;
         usageThreshold: number;

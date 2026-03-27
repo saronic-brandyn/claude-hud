@@ -7,6 +7,7 @@ export async function parseTranscript(transcriptPath) {
         tools: [],
         agents: [],
         todos: [],
+        mcpErrors: new Set(),
     };
     if (!transcriptPath || !fs.existsSync(transcriptPath)) {
         return result;
@@ -171,6 +172,13 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
             if (tool) {
                 tool.status = block.is_error ? 'error' : 'completed';
                 tool.endTime = timestamp;
+                // Track MCP server errors (tool names like mcp__servername__toolname)
+                if (block.is_error && tool.name.startsWith('mcp__')) {
+                    const parts = tool.name.split('__');
+                    if (parts.length >= 3) {
+                        result.mcpErrors.add(parts[1]);
+                    }
+                }
             }
             const agent = agentMap.get(block.tool_use_id);
             if (agent) {

@@ -29,6 +29,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     tools: [],
     agents: [],
     todos: [],
+    mcpErrors: new Set<string>(),
   };
 
   if (!transcriptPath || !fs.existsSync(transcriptPath)) {
@@ -202,6 +203,14 @@ function processEntry(
       if (tool) {
         tool.status = block.is_error ? 'error' : 'completed';
         tool.endTime = timestamp;
+
+        // Track MCP server errors (tool names like mcp__servername__toolname)
+        if (block.is_error && tool.name.startsWith('mcp__')) {
+          const parts = tool.name.split('__');
+          if (parts.length >= 3) {
+            result.mcpErrors.add(parts[1]);
+          }
+        }
       }
 
       const agent = agentMap.get(block.tool_use_id);
