@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseTranscript } from '../dist/transcript.js';
 import { countConfigs } from '../dist/config-reader.js';
-import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, isBedrockModelId } from '../dist/stdin.js';
+import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, isBedrockModelId, stripContextSuffix } from '../dist/stdin.js';
 import * as fs from 'node:fs';
 
 function restoreEnvVar(name, value) {
@@ -217,6 +217,35 @@ test('getModelName precedence: trimmed display name, then normalized bedrock lab
   assert.equal(getModelName({ model: { id: '  sonnet-456  ' } }), 'sonnet-456');
   assert.equal(getModelName({ model: { display_name: '   ', id: '   ' } }), 'Unknown');
   assert.equal(getModelName({}), 'Unknown');
+});
+
+test('getModelName strips redundant context-window suffixes from display_name', () => {
+  // Common patterns seen from Claude Code stdin
+  assert.equal(getModelName({ model: { display_name: 'Opus 4.6 (1M context)' } }), 'Opus 4.6');
+  assert.equal(getModelName({ model: { display_name: 'Sonnet 4 (200k context)' } }), 'Sonnet 4');
+  assert.equal(getModelName({ model: { display_name: 'Claude 3.5 Haiku (200k context)' } }), 'Claude 3.5 Haiku');
+  assert.equal(getModelName({ model: { display_name: 'Claude 3.5 (with 1M context)' } }), 'Claude 3.5');
+  // Case-insensitive matching
+  assert.equal(getModelName({ model: { display_name: 'Opus (1M Context)' } }), 'Opus');
+  // Names without context suffix are unchanged
+  assert.equal(getModelName({ model: { display_name: 'Sonnet 4.6' } }), 'Sonnet 4.6');
+  assert.equal(getModelName({ model: { display_name: 'Claude Opus' } }), 'Claude Opus');
+});
+
+test('stripContextSuffix removes parenthetical context-window info', () => {
+  assert.equal(stripContextSuffix('Opus 4.6 (1M context)'), 'Opus 4.6');
+  assert.equal(stripContextSuffix('Sonnet 4 (200k context)'), 'Sonnet 4');
+  assert.equal(stripContextSuffix('Claude 3.5 Haiku (200k context)'), 'Claude 3.5 Haiku');
+  assert.equal(stripContextSuffix('Model (with 1M context)'), 'Model');
+  assert.equal(stripContextSuffix('Model (extended context window)'), 'Model');
+  // Case-insensitive
+  assert.equal(stripContextSuffix('Opus (1M CONTEXT)'), 'Opus');
+  // Preserves non-context parentheticals
+  assert.equal(stripContextSuffix('Model (beta)'), 'Model (beta)');
+  assert.equal(stripContextSuffix('Model (preview)'), 'Model (preview)');
+  // No-op when no suffix present
+  assert.equal(stripContextSuffix('Sonnet 4.6'), 'Sonnet 4.6');
+  assert.equal(stripContextSuffix(''), '');
 });
 
 test('bedrock model detection recognizes bedrock ids', () => {

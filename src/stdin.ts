@@ -195,10 +195,26 @@ export function getBufferedPercent(stdin: StdinData): number {
   return Math.min(100, Math.round(((totalTokens + buffer) / size) * 100));
 }
 
+/**
+ * Strips redundant context-window size suffixes from model display names.
+ *
+ * Claude Code may include the context window size in the display name
+ * (e.g. "Opus 4.6 (1M context)"), but the HUD already shows context
+ * usage via the context bar — so the parenthetical is redundant.
+ *
+ * Handles common variants:
+ *   "Opus 4.6 (1M context)"         → "Opus 4.6"
+ *   "Sonnet 4 (200k context)"       → "Sonnet 4"
+ *   "Claude 3.5 (with 1M context)"  → "Claude 3.5"
+ */
+export function stripContextSuffix(name: string): string {
+  return name.replace(/\s*\([^)]*\bcontext\b[^)]*\)/i, '').trim();
+}
+
 export function getModelName(stdin: StdinData): string {
   const displayName = stdin.model?.display_name?.trim();
   if (displayName) {
-    return displayName;
+    return stripContextSuffix(displayName);
   }
 
   const modelId = stdin.model?.id?.trim();
