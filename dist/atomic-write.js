@@ -12,12 +12,11 @@ export function atomicWriteFileSync(filePath, data) {
         fs.renameSync(tmpPath, filePath);
     }
     catch {
-        // Clean up temp file on failure, fall back to direct write
+        // Clean up temp file on failure — do NOT fall back to non-atomic write
         try {
             fs.unlinkSync(tmpPath);
         }
         catch { /* ignore */ }
-        fs.writeFileSync(filePath, data, 'utf8');
     }
 }
 //# sourceMappingURL=atomic-write.js.map

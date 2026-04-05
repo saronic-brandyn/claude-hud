@@ -1,6 +1,7 @@
 export type QueryCostDeps = {
     homeDir: () => string;
     now: () => number;
+    sessionId?: string;
 };
 export interface QueryCostInfo {
     cost: number;

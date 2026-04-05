@@ -6,6 +6,7 @@ export interface CompactionEvent {
 export type CompactionDeps = {
     homeDir: () => string;
     now: () => number;
+    sessionId?: string;
 };
 /**
  * Detect context compaction events by tracking percentage drops.

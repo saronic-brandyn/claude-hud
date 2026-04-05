@@ -1,10 +1,7 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
 import type { StdinData } from './types.js';
 import { getTotalTokens } from './stdin.js';
-import { getHudPluginDir } from './claude-config-dir.js';
-import { atomicWriteFileSync } from './atomic-write.js';
+import { FileCache } from './file-cache.js';
 
 /** Minimum window to calculate velocity (avoid spikes from rapid renders) */
 const MIN_WINDOW_MS = 3000;
@@ -21,6 +18,7 @@ interface VelocityCache {
 export type VelocityDeps = {
   homeDir: () => string;
   now: () => number;
+  sessionId?: string;
 };
 
 const defaultDeps: VelocityDeps = {
@@ -28,37 +26,13 @@ const defaultDeps: VelocityDeps = {
   now: () => Date.now(),
 };
 
-function getCachePath(homeDir: string): string {
-  return path.join(getHudPluginDir(homeDir), '.velocity-cache.json');
-}
-
-function readCache(homeDir: string): VelocityCache | null {
-  try {
-    const cachePath = getCachePath(homeDir);
-    if (!fs.existsSync(cachePath)) return null;
-    const content = fs.readFileSync(cachePath, 'utf8');
-    const parsed = JSON.parse(content) as VelocityCache;
-    if (typeof parsed.totalTokens !== 'number' || typeof parsed.timestamp !== 'number') {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(homeDir: string, cache: VelocityCache): void {
-  try {
-    const cachePath = getCachePath(homeDir);
-    const cacheDir = path.dirname(cachePath);
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-    }
-    atomicWriteFileSync(cachePath, JSON.stringify(cache));
-  } catch {
-    // Ignore cache write failures
-  }
-}
+const cache = new FileCache<VelocityCache>({
+  name: 'velocity-cache',
+  validate: (d): d is VelocityCache =>
+    d != null && typeof d === 'object'
+    && typeof (d as VelocityCache).totalTokens === 'number'
+    && typeof (d as VelocityCache).timestamp === 'number',
+});
 
 /**
  * Calculate context token velocity in tokens/minute.
@@ -76,10 +50,11 @@ export function getContextVelocity(stdin: StdinData, overrides: Partial<Velocity
   const deps = { ...defaultDeps, ...overrides };
   const now = deps.now();
   const homeDir = deps.homeDir();
-  const previous = readCache(homeDir);
+  const sid = deps.sessionId;
+  const previous = cache.read(homeDir, sid);
 
   // Always update cache with current state
-  writeCache(homeDir, { totalTokens, timestamp: now });
+  cache.write(homeDir, { totalTokens, timestamp: now }, sid);
 
   if (!previous) return { velocity: null, delta: null };
 

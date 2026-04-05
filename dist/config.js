@@ -43,7 +43,7 @@ export const DEFAULT_CONFIG = {
         showCost: true,
         showCostBreakdown: false,
         showCostByAction: false,
-        costByActionThreshold: 1.00,
+        costByActionThreshold: 0.10,
         showEffort: true,
         showLinesChanged: true,
         autocompactBuffer: 'enabled',
