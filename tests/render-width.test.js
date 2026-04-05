@@ -53,7 +53,9 @@ function baseContext() {
 
 function stripAnsi(str) {
   // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return str
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
 }
 
 function isWideCodePoint(codePoint) {
@@ -210,6 +212,50 @@ test('render falls back to stderr.columns when stdout.columns is unavailable', (
   assert.ok(lines.length > 0, 'should still render output lines');
   assert.ok(lines.every(line => displayWidth(line) <= 12), 'stderr width should be honored');
   assert.ok(lines.some(line => displayWidth(line) > 10), 'stderr width should override COLUMNS fallback');
+});
+
+test('render ignores OSC 8 hyperlink sequences when measuring line width', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'compact';
+  ctx.stdin.context_window.current_usage.input_tokens = 0;
+  ctx.config.display.showContextBar = false;
+  ctx.config.display.showConfigCounts = false;
+  ctx.config.display.showUsage = false;
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.sessionDuration = '1m';
+  ctx.extraLabel = '\x1b]8;;file:///tmp/my-project\x1b\\linked-label\x1b]8;;\x1b\\';
+
+  let lines = [];
+  withTerminal(47, () => {
+    lines = captureRender(ctx);
+  });
+
+  assert.equal(lines.length, 1, 'a visibly short line with an OSC 8 hyperlink should stay on one line');
+  assert.ok(lines[0].includes('linked-label'), 'hyperlink label text should still render');
+  assert.ok(lines[0].includes('1m'), 'later elements should not be wrapped off the line');
+  assert.ok(displayWidth(lines[0]) <= 47, 'visible width should respect terminal width');
+});
+
+test('render ignores BEL-terminated OSC 8 hyperlink sequences when measuring line width', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'compact';
+  ctx.stdin.context_window.current_usage.input_tokens = 0;
+  ctx.config.display.showContextBar = false;
+  ctx.config.display.showConfigCounts = false;
+  ctx.config.display.showUsage = false;
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.sessionDuration = '1m';
+  ctx.extraLabel = '\x1b]8;;file:///tmp/my-project\x07linked-label\x1b]8;;\x07';
+
+  let lines = [];
+  withTerminal(47, () => {
+    lines = captureRender(ctx);
+  });
+
+  assert.equal(lines.length, 1, 'a visibly short BEL-terminated OSC 8 hyperlink should stay on one line');
+  assert.ok(lines[0].includes('linked-label'), 'hyperlink label text should still render');
+  assert.ok(lines[0].includes('1m'), 'later elements should not be wrapped off the line');
+  assert.ok(displayWidth(lines[0]) <= 47, 'visible width should respect terminal width');
 });
 
 test('render prefers stdout columns over COLUMNS env fallback', () => {

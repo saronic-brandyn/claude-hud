@@ -6,8 +6,9 @@ import { renderTodosLine } from './todos-line.js';
 import { renderIdentityLine, renderProjectLine, renderEnvironmentLine, renderUsageLine, renderCostLine, } from './lines/index.js';
 import { dim, RESET, initColors } from './colors.js';
 // eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE_PATTERN = /^\x1b\[[0-9;]*m/;
-const ANSI_ESCAPE_GLOBAL = /\x1b\[[0-9;]*m/g;
+const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_GLOBAL = /(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
 const GRAPHEME_SEGMENTER = typeof Intl.Segmenter === 'function'
     ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
     : null;
