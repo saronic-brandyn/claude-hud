@@ -105,20 +105,21 @@ export async function main(overrides = {}) {
         const sessionDuration = nativeDurationMs && nativeDurationMs > 0
             ? formatDurationMs(nativeDurationMs)
             : formatSessionDuration(transcript.sessionStart, deps.now);
-        const velocityResult = getContextVelocity(stdin);
+        const sessionId = stdin.session_id;
+        const velocityResult = getContextVelocity(stdin, { sessionId });
         const contextVelocity = velocityResult.velocity;
         const contextDelta = velocityResult.delta;
         const autocompactMode = config.display?.autocompactBuffer ?? 'enabled';
         const percent = autocompactMode === 'disabled'
             ? getContextPercent(stdin)
             : getBufferedPercent(stdin);
-        const compactionEvent = detectCompaction(percent);
+        const compactionEvent = detectCompaction(percent, { sessionId });
         // Use native cost data from stdin (Claude Code provides exact cumulative cost)
         const costData = (config.display.showCost !== false && stdin.cost) ? stdin.cost : null;
-        const queryCost = costData ? getQueryCost(costData.total_cost_usd) : null;
+        const queryCost = costData ? getQueryCost(costData.total_cost_usd, { sessionId }) : null;
         // Track cost attribution by tool type
         const actionCosts = (costData && config.display.showCostByAction)
-            ? getActionCosts(costData.total_cost_usd, transcript.tools, transcript.agents, config.display.costByActionThreshold)
+            ? getActionCosts(costData.total_cost_usd, transcript.tools, transcript.agents, config.display.costByActionThreshold, sessionId)
             : null;
         const ctx = {
             stdin,

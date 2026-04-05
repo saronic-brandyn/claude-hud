@@ -13,5 +13,5 @@ export interface ActionCostEntry {
  *
  * Returns aggregated cost-by-tool-type, sorted descending.
  */
-export declare function getActionCosts(totalCostUsd: number | undefined, tools: ToolEntry[], agents: AgentEntry[], threshold: number): ActionCostEntry[] | null;
+export declare function getActionCosts(totalCostUsd: number | undefined, tools: ToolEntry[], agents: AgentEntry[], threshold: number, sessionId?: string): ActionCostEntry[] | null;
 //# sourceMappingURL=action-cost.d.ts.map

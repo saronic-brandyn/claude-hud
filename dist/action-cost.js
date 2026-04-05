@@ -1,40 +1,11 @@
-import * as fs from 'node:fs';
 import * as os from 'node:os';
-import * as path from 'node:path';
-import { getHudPluginDir } from './claude-config-dir.js';
-import { atomicWriteFileSync } from './atomic-write.js';
-function getCachePath(homeDir) {
-    return path.join(getHudPluginDir(homeDir), '.action-cost-cache.json');
-}
-function readCache(homeDir) {
-    try {
-        const cachePath = getCachePath(homeDir);
-        if (!fs.existsSync(cachePath))
-            return null;
-        const content = fs.readFileSync(cachePath, 'utf8');
-        const parsed = JSON.parse(content);
-        if (typeof parsed.lastTotalCost !== 'number' || typeof parsed.costByTool !== 'object') {
-            return null;
-        }
-        return parsed;
-    }
-    catch {
-        return null;
-    }
-}
-function writeCache(homeDir, cache) {
-    try {
-        const cachePath = getCachePath(homeDir);
-        const cacheDir = path.dirname(cachePath);
-        if (!fs.existsSync(cacheDir)) {
-            fs.mkdirSync(cacheDir, { recursive: true });
-        }
-        atomicWriteFileSync(cachePath, JSON.stringify(cache));
-    }
-    catch {
-        // Ignore cache write failures
-    }
-}
+import { FileCache } from './file-cache.js';
+const cache = new FileCache({
+    name: 'action-cost-cache',
+    validate: (d) => d != null && typeof d === 'object'
+        && typeof d.lastTotalCost === 'number'
+        && typeof d.costByTool === 'object',
+});
 /**
  * Track cost attribution by tool type.
  *
@@ -45,22 +16,22 @@ function writeCache(homeDir, cache) {
  *
  * Returns aggregated cost-by-tool-type, sorted descending.
  */
-export function getActionCosts(totalCostUsd, tools, agents, threshold) {
+export function getActionCosts(totalCostUsd, tools, agents, threshold, sessionId) {
     if (totalCostUsd == null)
         return null;
     const homeDir = os.homedir();
-    const cache = readCache(homeDir);
+    const prev = cache.read(homeDir, sessionId);
     // First invocation — establish baseline
-    if (!cache) {
-        writeCache(homeDir, {
+    if (!prev) {
+        cache.write(homeDir, {
             costByTool: {},
             lastTotalCost: totalCostUsd,
             lastActiveToolIds: [],
-        });
+        }, sessionId);
         return null;
     }
-    const costDelta = totalCostUsd - cache.lastTotalCost;
-    let costByTool = cache.costByTool;
+    const costDelta = totalCostUsd - prev.lastTotalCost;
+    let costByTool = prev.costByTool;
     if (costDelta > 0) {
         // Cost increased — attribute to active tools
         const runningTools = tools.filter(t => t.status === 'running');
@@ -78,23 +49,23 @@ export function getActionCosts(totalCostUsd, tools, agents, threshold) {
         }
         // Split delta evenly among active tools
         const share = costDelta / activeNames.length;
-        costByTool = { ...cache.costByTool };
+        costByTool = { ...prev.costByTool };
         for (const name of activeNames) {
             costByTool[name] = (costByTool[name] ?? 0) + share;
         }
-        writeCache(homeDir, {
+        cache.write(homeDir, {
             costByTool,
             lastTotalCost: totalCostUsd,
             lastActiveToolIds: runningTools.map(t => t.id),
-        });
+        }, sessionId);
     }
     else if (costDelta < 0) {
         // Cost decreased (new session) — reset
-        writeCache(homeDir, {
+        cache.write(homeDir, {
             costByTool: {},
             lastTotalCost: totalCostUsd,
             lastActiveToolIds: [],
-        });
+        }, sessionId);
         return null;
     }
     // costDelta === 0: no change, use existing cache

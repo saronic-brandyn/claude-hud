@@ -2,6 +2,7 @@ import type { StdinData } from './types.js';
 export type VelocityDeps = {
     homeDir: () => string;
     now: () => number;
+    sessionId?: string;
 };
 /**
  * Calculate context token velocity in tokens/minute.

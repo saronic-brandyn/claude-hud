@@ -1,21 +1,32 @@
-import { yellow, cyan, dim } from './colors.js';
+import { yellow, green, cyan, dim } from './colors.js';
+/** How long to show completed tools after they finish (ms) */
+const COMPLETED_VISIBLE_MS = 5000;
 export function renderToolsLine(ctx) {
     const { tools } = ctx.transcript;
     const runningTools = tools.filter((t) => t.status === 'running');
-    if (runningTools.length === 0) {
+    const now = Date.now();
+    const recentCompleted = tools
+        .filter((t) => t.status === 'completed' && t.endTime && (now - t.endTime.getTime()) < COMPLETED_VISIBLE_MS)
+        .slice(-2);
+    if (runningTools.length === 0 && recentCompleted.length === 0) {
         return null;
     }
     const ascii = ctx.config?.display?.asciiMode ?? false;
     const symRunning = ascii ? '~' : '◐';
+    const symDone = ascii ? '+' : '✓';
     const parts = [];
     for (const tool of runningTools.slice(-3)) {
         const target = tool.target ? truncatePath(tool.target) : '';
-        const elapsed = Date.now() - tool.startTime.getTime();
+        const elapsed = now - tool.startTime.getTime();
         const elapsedStr = elapsed > 5000 ? ` ${dim(`(${formatElapsed(elapsed)})`)}` : '';
         parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}${elapsedStr}`);
     }
     if (runningTools.length > 3) {
         parts.push(dim(`+${runningTools.length - 3} more`));
+    }
+    for (const tool of recentCompleted) {
+        const target = tool.target ? truncatePath(tool.target) : '';
+        parts.push(`${green(symDone)} ${dim(tool.name)}${target ? dim(`: ${target}`) : ''}`);
     }
     return parts.join(' | ');
 }
