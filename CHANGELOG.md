@@ -5,7 +5,8 @@ All notable changes to Claude HUD will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
-- Windows + PowerShell `/claude-hud:setup` now writes a `statusline.ps1` wrapper that guards `[Console]::WindowWidth` in `try/catch` and uses the corrected `plugins\cache\*\claude-hud\*` glob with the required trailing wildcard. The HUD no longer silently fails on Windows when the statusLine subprocess has no console handle, and the cache glob no longer matches the `claude-hud` directory itself instead of its version subdirectories. Added guidance for writing `settings.json` without a UTF-8 BOM on Windows PowerShell 5.1, where `Set-Content -Encoding UTF8` emits `EF BB BF` (#521).
+- Windows + PowerShell `/claude-hud:setup` now writes a `statusline.ps1` wrapper with a guarded width fallback and corrected version-directory glob (#521).
+- Added Windows PowerShell 5.1 guidance for writing `settings.json` without a UTF-8 BOM.
 
 ## [0.0.12] - 2026-04-04
 

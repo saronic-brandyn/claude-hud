@@ -205,7 +205,7 @@ Instead, use `sort -V` (GNU version sort, included with Git for Windows) which a
 1. Get plugin path:
    ```powershell
    $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
-   (Get-ChildItem (Join-Path $claudeDir "plugins\cache\*\claude-hud\*") -Directory | Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).FullName
+   (Get-ChildItem (Join-Path $claudeDir "plugins\cache\*\claude-hud\*") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).FullName
    ```
    The trailing `\*` on the cache glob is required. Without it, `Get-ChildItem` returns the `claude-hud` directory itself, whose name does not match the `^\d+(\.\d+)+$` version pattern, so the lookup resolves to `$null` and any subsequent `Join-Path` throws (see [#521](https://github.com/jarrodwatts/claude-hud/issues/521)).
 
@@ -238,7 +238,7 @@ Instead, use `sort -V` (GNU version sort, included with Git for Windows) which a
    try { $w = [Console]::WindowWidth } catch { $w = 120 }
    $env:COLUMNS = [Math]::Max(1, $w - 4)
    $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
-   $pluginDir = (Get-ChildItem (Join-Path $claudeDir 'plugins\cache\*\claude-hud\*') -Directory |
+   $pluginDir = (Get-ChildItem (Join-Path $claudeDir 'plugins\cache\*\claude-hud\*') -Directory -ErrorAction SilentlyContinue |
        Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
        Sort-Object { [version]$_.Name } -Descending |
        Select-Object -First 1).FullName
@@ -252,21 +252,22 @@ Instead, use `sort -V` (GNU version sort, included with Git for Windows) which a
    $wrapperDir = Join-Path $claudeDir "plugins\claude-hud"
    New-Item -ItemType Directory -Force -Path $wrapperDir | Out-Null
    $wrapperPath = Join-Path $wrapperDir "statusline.ps1"
+   $runtimePathLiteral = $runtimePath.Replace("'", "''")
    $wrapperBody = ({
        try { $w = [Console]::WindowWidth } catch { $w = 120 }
        $env:COLUMNS = [Math]::Max(1, $w - 4)
        $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
-       $pluginDir = (Get-ChildItem (Join-Path $claudeDir 'plugins\cache\*\claude-hud\*') -Directory |
+       $pluginDir = (Get-ChildItem (Join-Path $claudeDir 'plugins\cache\*\claude-hud\*') -Directory -ErrorAction SilentlyContinue |
            Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
            Sort-Object { [version]$_.Name } -Descending |
            Select-Object -First 1).FullName
        if (-not $pluginDir) { exit 0 }
        & '__RUNTIME_PATH__' (Join-Path $pluginDir 'dist\index.js')
-   }.ToString().Trim()) -replace '__RUNTIME_PATH__', $runtimePath
+   }.ToString().Trim()).Replace('__RUNTIME_PATH__', $runtimePathLiteral)
    [System.IO.File]::WriteAllText($wrapperPath, $wrapperBody, (New-Object System.Text.UTF8Encoding $false))
    ```
 
-   `$runtimePath` is the value detected in step 2 (the absolute path returned by `(Get-Command node).Source`, typically `C:\Program Files\nodejs\node.exe`). The `__RUNTIME_PATH__` placeholder + `-replace` pattern avoids embedding a literal path inside the script block (where `{}` braces would parse the path's quoting differently).
+   `$runtimePath` is the value detected in step 2 (the absolute path returned by `(Get-Command node).Source`, typically `C:\Program Files\nodejs\node.exe`). `$runtimePathLiteral` escapes single quotes for the generated single-quoted PowerShell command, and `.Replace()` performs literal replacement so `$` and other regex replacement characters in the runtime path are preserved.
 
    `Set-Content -Encoding UTF8` and `Out-File -Encoding UTF8` on Windows PowerShell 5.1 both emit a UTF-8 BOM — PS 7+ added `-Encoding utf8NoBOM`, but PS 5.1 ships as the Windows 10/11 default and does not. `WriteAllText` + `UTF8Encoding $false` writes without a BOM in both versions.
 
