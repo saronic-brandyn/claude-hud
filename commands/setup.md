@@ -289,6 +289,116 @@ Run the generated command. It should produce output (the HUD lines) within a few
 - If it hangs for more than a few seconds, cancel and debug.
 - This test catches issues like broken runtime binaries, missing plugins, or path problems.
 
+## Step 2.5: Detect Existing Statusline and Create Backup
+
+Before writing to `settings.json`, check whether a `statusLine` key already exists and protect the user's current configuration.
+
+### 2.5.1: Read the existing statusLine
+
+**macOS/Linux**:
+```bash
+SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+EXISTING_COMMAND=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+```
+
+**Windows (PowerShell)**:
+```powershell
+$settingsPath = if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR "settings.json" } else { Join-Path $HOME ".claude\settings.json" }
+$existingCommand = ""
+if (Test-Path $settingsPath) {
+  try {
+    $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    if ($json.statusLine -and $json.statusLine.command) {
+      $existingCommand = $json.statusLine.command
+    }
+  } catch {
+    # Invalid JSON - will be caught in Step 3
+  }
+}
+```
+
+### 2.5.2: Classify the existing statusline
+
+If `EXISTING_COMMAND` / `$existingCommand` is non-empty, classify it:
+
+| Pattern in command | Classification | Source label |
+|---|---|---|
+| Contains `claude-hud` | **Reinstall** (own config) | `claude-hud` |
+| Contains `claude-pace` | **Known project** | `claude-pace` |
+| Contains `cc-statusline` or `ccstatusline` | **Known project** | `cc-statusline` |
+| Contains `statusline.sh` or `statusline.js` or `statusline.py` | **Likely another statusline** | `statusline script` |
+| Any other non-empty value | **Custom script** | `custom` |
+| Empty / missing key | **Clean install** | (none) |
+
+### 2.5.3: Create a timestamped backup
+
+**Always** create a backup of `settings.json` before modifying it, regardless of whether a statusline exists. This protects against corruption (see [#315]) and gives users a recovery path.
+
+**macOS/Linux**:
+```bash
+SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+if [ -f "$SETTINGS" ]; then
+  cp "$SETTINGS" "${SETTINGS}.bak.$(date +%Y%m%d-%H%M%S)"
+  echo "Backup created: ${SETTINGS}.bak.$(date +%Y%m%d-%H%M%S)"
+fi
+```
+
+**Windows (PowerShell)**:
+```powershell
+if (Test-Path $settingsPath) {
+  $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+  $backupPath = "${settingsPath}.bak.${timestamp}"
+  Copy-Item $settingsPath $backupPath
+  Write-Host "Backup created: $backupPath"
+}
+```
+
+### 2.5.4: Prompt the user if a statusline exists
+
+**If the statusline is empty (clean install)**: Skip this step. Proceed directly to Step 3.
+
+**If the statusline is claude-hud (reinstall)**: Skip this step. The new command replaces the old one — this is an idempotent update. Proceed to Step 3.
+
+**If the statusline belongs to a known project or is a custom script**: Use AskUserQuestion to ask the user what to do.
+
+Use AskUserQuestion:
+- header: "Existing statusline detected"
+- question: "Found an existing statusLine in settings.json:\n\n  command: {EXISTING_COMMAND}\n  source: {SOURCE_LABEL}\n\nWhat would you like to do?"
+- options:
+  - "Replace it with claude-hud (your current setup will be backed up)"
+  - "Keep my current statusline and exit setup"
+  - "Cancel (no changes)"
+
+**If the user chooses "Keep" or "Cancel"**: Stop setup. The backup from 2.5.3 is still available but no changes are made to `settings.json`. Tell the user:
+
+> No changes were made to your settings. Your existing statusline is preserved. The backup is at `{SETTINGS}.bak.{timestamp}` if you need it.
+
+**If the user chooses "Replace"**: Proceed to Step 3. The backup from 2.5.3 ensures the previous configuration can be restored.
+
+### 2.5.5: Save the previous command for potential restoration
+
+Store the previous `statusLine.command` value in a file alongside the settings backup. This makes it easy to restore if the user later wants to switch back.
+
+**macOS/Linux**:
+```bash
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+if [ -n "$EXISTING_COMMAND" ]; then
+  echo "$EXISTING_COMMAND" > "$CLAUDE_DIR/plugins/claude-hud/previous-statusline.txt"
+fi
+```
+
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$pluginDir = Join-Path $claudeDir "plugins\claude-hud"
+if (-not (Test-Path $pluginDir)) { New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null }
+if ($existingCommand -ne "") {
+  Set-Content -Path (Join-Path $pluginDir "previous-statusline.txt") -Value $existingCommand -NoNewline
+}
+```
+
+---
+
 ## Step 3: Apply Configuration
 
 Read the settings file and merge in the statusLine config, preserving all existing settings:
@@ -297,6 +407,8 @@ Read the settings file and merge in the statusLine config, preserving all existi
 
 If the file doesn't exist, create it. If it contains invalid JSON, report the error and do not overwrite.
 If a write fails with `File has been unexpectedly modified`, re-read the file and retry the merge once.
+
+**A timestamped backup was already created in Step 2.5.3.** If Step 2.5.4 prompted the user and they chose "Keep" or "Cancel", do not reach this step — setup has already exited.
 
 ```json
 {
@@ -334,6 +446,11 @@ After successfully writing the config, tell the user:
 - After `statusLine` is written successfully, they should fully quit Claude Code and launch a fresh session before judging whether the HUD setup worked.
 
 **Note**: The generated command dynamically finds and runs the latest installed plugin version. Updates are automatic - no need to re-run setup after plugin updates. If the HUD suddenly stops working, re-run `/claude-hud:setup` to verify the plugin is still installed.
+
+**Restoring a previous statusline**: If the user previously had a different statusline and wants to restore it, the backup is at `settings.json.bak.{timestamp}` and the previous command is stored in `~/.claude/plugins/claude-hud/previous-statusline.txt`. To restore:
+1. Find the most recent backup: `ls -t ~/.claude/settings.json.bak.* | head -1`
+2. Copy it back: `cp ~/.claude/settings.json.bak.{timestamp} ~/.claude/settings.json`
+3. Restart Claude Code.
 
 ## Step 4: Optional Features
 
