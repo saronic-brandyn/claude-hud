@@ -81,6 +81,7 @@ export async function runExtraCmd(cmd: string, timeout: number = TIMEOUT_MS): Pr
     const { stdout } = await execAsync(cmd, {
       timeout,
       maxBuffer: MAX_BUFFER,
+      windowsHide: true,
     });
     const data: unknown = JSON.parse(stdout.trim());
     if (

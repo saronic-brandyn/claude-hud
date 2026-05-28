@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseTranscript } from '../dist/transcript.js';
 import { countConfigs } from '../dist/config-reader.js';
-import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, isBedrockModelId } from '../dist/stdin.js';
+import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, isBedrockModelId, stripContextSuffix } from '../dist/stdin.js';
 import * as fs from 'node:fs';
 
 function restoreEnvVar(name, value) {
@@ -219,6 +219,35 @@ test('getModelName precedence: trimmed display name, then normalized bedrock lab
   assert.equal(getModelName({}), 'Unknown');
 });
 
+test('getModelName strips redundant context-window suffixes from display_name', () => {
+  // Common patterns seen from Claude Code stdin
+  assert.equal(getModelName({ model: { display_name: 'Opus 4.6 (1M context)' } }), 'Opus 4.6');
+  assert.equal(getModelName({ model: { display_name: 'Sonnet 4 (200k context)' } }), 'Sonnet 4');
+  assert.equal(getModelName({ model: { display_name: 'Claude 3.5 Haiku (200k context)' } }), 'Claude 3.5 Haiku');
+  assert.equal(getModelName({ model: { display_name: 'Claude 3.5 (with 1M context)' } }), 'Claude 3.5');
+  // Case-insensitive matching
+  assert.equal(getModelName({ model: { display_name: 'Opus (1M Context)' } }), 'Opus');
+  // Names without context suffix are unchanged
+  assert.equal(getModelName({ model: { display_name: 'Sonnet 4.6' } }), 'Sonnet 4.6');
+  assert.equal(getModelName({ model: { display_name: 'Claude Opus' } }), 'Claude Opus');
+});
+
+test('stripContextSuffix removes parenthetical context-window info', () => {
+  assert.equal(stripContextSuffix('Opus 4.6 (1M context)'), 'Opus 4.6');
+  assert.equal(stripContextSuffix('Sonnet 4 (200k context)'), 'Sonnet 4');
+  assert.equal(stripContextSuffix('Claude 3.5 Haiku (200k context)'), 'Claude 3.5 Haiku');
+  assert.equal(stripContextSuffix('Model (with 1M context)'), 'Model');
+  assert.equal(stripContextSuffix('Model (extended context window)'), 'Model');
+  // Case-insensitive
+  assert.equal(stripContextSuffix('Opus (1M CONTEXT)'), 'Opus');
+  // Preserves non-context parentheticals
+  assert.equal(stripContextSuffix('Model (beta)'), 'Model (beta)');
+  assert.equal(stripContextSuffix('Model (preview)'), 'Model (preview)');
+  // No-op when no suffix present
+  assert.equal(stripContextSuffix('Sonnet 4.6'), 'Sonnet 4.6');
+  assert.equal(stripContextSuffix(''), '');
+});
+
 test('bedrock model detection recognizes bedrock ids', () => {
   assert.ok(isBedrockModelId('anthropic.claude-3-5-sonnet-20240620-v1:0'));
   assert.ok(isBedrockModelId('eu.anthropic.claude-opus-4-5-20251101-v1:0'));
@@ -405,6 +434,57 @@ test('parseTranscript extracts tool targets for common tools', async () => {
     assert.equal(targets.get('Bash'), 'echo hello world');
     assert.equal(targets.get('Glob'), '**/*.ts');
     assert.equal(targets.get('Grep'), 'render');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseTranscript extracts Skill tool target from non-empty input.skill', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'skill-target.jsonl');
+  const lines = [
+    JSON.stringify({
+      message: {
+        content: [
+          { type: 'tool_use', id: 'tool-1', name: 'Skill', input: { skill: 'prd-development' } },
+        ],
+      },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.tools.length, 1);
+    assert.equal(result.tools[0].name, 'Skill');
+    assert.equal(result.tools[0].target, 'prd-development');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseTranscript leaves Skill target empty when input.skill is missing or invalid', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'skill-target-invalid.jsonl');
+  const lines = [
+    JSON.stringify({
+      message: {
+        content: [
+          { type: 'tool_use', id: 'tool-1', name: 'Skill', input: {} },
+          { type: 'tool_use', id: 'tool-2', name: 'Skill', input: { skill: 123 } },
+          { type: 'tool_use', id: 'tool-3', name: 'Skill', input: { skill: '   ' } },
+        ],
+      },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.tools.length, 3);
+    assert.deepEqual(result.tools.map((tool) => tool.target), [undefined, undefined, undefined]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

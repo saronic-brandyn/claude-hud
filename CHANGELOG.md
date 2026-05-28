@@ -4,24 +4,51 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
-## [0.0.10] - 2026-03-14
+### Fixed
+- Windows + PowerShell `/claude-hud:setup` now writes a `statusline.ps1` wrapper with a guarded width fallback and corrected version-directory glob (#521).
+- Added Windows PowerShell 5.1 guidance for writing `settings.json` without a UTF-8 BOM.
+
+## [0.0.12] - 2026-04-04
 
 ### Added
-- Semantic HUD color overrides for context and usage states.
+- Chinese (`zh`) HUD labels as an explicit opt-in, while keeping English as the default.
+- Guided language selection in `/claude-hud:configure` so users can choose English or Chinese without hand-editing JSON.
+- Offline estimated session cost display via `display.showCost` for known Anthropic model families, derived from local transcript token usage only.
+- Session token totals, output-style display, git push count threshold coloring, configurable model badge formatting, and a custom model override.
+- Git file diff rendering with per-file and total line deltas, plus clickable OSC 8 file links where supported.
 
 ### Changed
-- Update the fallback autocompact buffer estimate from `22.5%` (`45k/200k`) to `16.5%` (`33k/200k`) to match current Claude Code `/context` output.
-- Clarify in code comments that the fallback buffer is empirical and may change independently of documented Claude Code releases.
-- Clarify that context percentages and token displays scale with Claude Code's reported context window size, including newer 1M-context sessions.
-- Text-only usage display now shows the 7-day reset countdown when applicable.
-- Rate-limited usage refreshes now keep the last successful values visible while marking the HUD as syncing.
+- Usage display now relies only on Claude Code's official stdin `rate_limits` fields. Background OAuth usage polling, related cache/lock behavior, and credential-derived subscriber plan labels were removed.
+- Setup and configure flows now better support simple onboarding: Windows setup prefers Node.js guidance, the GitHub star prompt includes `gh` compatibility guidance, and configure now exposes language as a first-class guided choice.
+- Plugin detection, config caching, and transcript-derived activity/session metadata are more robust and better covered by tests.
 
 ### Fixed
-- Context percentage no longer starts with an inflated fallback percentage before native data exists.
-- Usage API rate-limit handling is more resilient, including better stale-cache behavior and `Retry-After` parsing.
-- Zero-byte usage lock files now recover instead of leaving the HUD permanently busy.
-- Plugin selection now prefers the highest installed version instead of filesystem mtime.
-- macOS Keychain lookup now prefers account-scoped credentials and avoids cross-account fallback when multiple accounts exist.
+- Stabilize Claude Code version cache behavior across resolved binary paths and mtimes, fixing Node 20 CI failures.
+- Stop guessing auth mode from environment variables alone.
+- Preserve task IDs across `TodoWrite`, detect transcript agents recorded as `Agent`, and improve narrow-terminal wrapping including OSC hyperlink width handling.
+- Improve macOS memory reporting, config cache invalidation, and fallback rendering when terminal width is unavailable.
+- Clarify official usage-data behavior and keep Bedrock/unknown pricing cases hidden rather than showing misleading estimates.
+
+## [0.0.10] - 2026-03-23
+
+### Added
+- Configurable HUD color overrides, including named presets, 256-color indices, and hex values.
+- `display.customLine` support for a short custom phrase in the HUD.
+- New opt-in display toggles for session name, combined context mode (`display.contextValue: "both"`), Claude Code version, and approximate system RAM usage in expanded layout.
+
+### Changed
+- Setup and plugin detection now better handle `CLAUDE_CONFIG_DIR`, Windows shell quoting, and Bun `--env-file` installs without inheriting project environment files.
+- Usage display now prefers Claude Code stdin `rate_limits` data when available, still falls back to the existing OAuth/cache path, and presents weekly-only/free-user usage more cleanly.
+- Context percentages and token displays now follow Claude Code's reported context window size, including newer 1M-context sessions, with a lower fallback autocompact estimate that better matches `/context`.
+- Usage text output now keeps the last successful values visible while syncing, shows the 7-day reset countdown when applicable, and clarifies that standard proxy environment variables are the supported way to route Anthropic traffic.
+- Progress bars and expanded-layout output now adapt more cleanly to narrow terminal widths.
+
+### Fixed
+- Setup is more reliable in sessions that previously failed to surface the HUD until Claude Code restarted, and plugin command discovery no longer fails with unknown-skill errors after install.
+- Usage handling is more resilient under OAuth token refreshes, proxy tunnels, explicit TLS overrides, zero-byte lock files, stale-cache recovery, and rate-limit edge cases that previously caused repeated `429` or syncing failures.
+- Account-scoped credential lookup and plugin selection are more reliable for multi-account setups and multiple installed plugin versions.
+- Expanded-layout rendering now preserves speed, duration, extra labels, and weekly-only usage output correctly.
+- Tool execution no longer scrolls the terminal to the top, and transcript reparsing now avoids repeatedly caching partial parse results on large histories.
 
 ---
 

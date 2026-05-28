@@ -19,7 +19,9 @@ export interface StdinData {
   output_style?: {
     name?: string;
   };
-  effort?: string;
+  // Claude Code 2.1.115+ sends an object { level: "max" }; older versions
+  // (and the original PR #471 future-proof) used a bare string. Accept both.
+  effort?: string | { level?: string | null; [key: string]: unknown } | null;
   cost?: {
     total_cost_usd?: number;
     total_duration_ms?: number;

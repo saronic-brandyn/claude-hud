@@ -25,7 +25,7 @@ export async function getGitBranch(cwd?: string): Promise<string | null> {
     const { stdout } = await execFileAsync(
       'git',
       ['rev-parse', '--abbrev-ref', 'HEAD'],
-      { cwd, timeout: 1000, encoding: 'utf8' }
+      { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true }
     );
     return stdout.trim() || null;
   } catch {
@@ -41,7 +41,7 @@ export async function getGitStatus(cwd?: string): Promise<GitStatus | null> {
     const { stdout: branchOut } = await execFileAsync(
       'git',
       ['rev-parse', '--abbrev-ref', 'HEAD'],
-      { cwd, timeout: 1000, encoding: 'utf8' }
+      { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true }
     );
     const branch = branchOut.trim();
     if (!branch) return null;
@@ -52,8 +52,8 @@ export async function getGitStatus(cwd?: string): Promise<GitStatus | null> {
     try {
       const { stdout: statusOut } = await execFileAsync(
         'git',
-        ['--no-optional-locks', 'status', '--porcelain'],
-        { cwd, timeout: 1000, encoding: 'utf8' }
+        ['-c', 'core.quotePath=false', '--no-optional-locks', 'status', '--porcelain'],
+        { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true }
       );
       const trimmed = statusOut.trim();
       isDirty = trimmed.length > 0;
@@ -71,7 +71,7 @@ export async function getGitStatus(cwd?: string): Promise<GitStatus | null> {
       const { stdout: revOut } = await execFileAsync(
         'git',
         ['rev-list', '--left-right', '--count', '@{upstream}...HEAD'],
-        { cwd, timeout: 1000, encoding: 'utf8' }
+        { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true }
       );
       const parts = revOut.trim().split(/\s+/);
       if (parts.length === 2) {
