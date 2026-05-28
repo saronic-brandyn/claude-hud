@@ -18,7 +18,10 @@ export interface StdinData {
     output_style?: {
         name?: string;
     };
-    effort?: string;
+    effort?: string | {
+        level?: string | null;
+        [key: string]: unknown;
+    } | null;
     cost?: {
         total_cost_usd?: number;
         total_duration_ms?: number;

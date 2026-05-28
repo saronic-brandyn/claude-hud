@@ -5,7 +5,7 @@ export async function getGitBranch(cwd) {
     if (!cwd)
         return null;
     try {
-        const { stdout } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeout: 1000, encoding: 'utf8' });
+        const { stdout } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true });
         return stdout.trim() || null;
     }
     catch {
@@ -17,7 +17,7 @@ export async function getGitStatus(cwd) {
         return null;
     try {
         // Get branch name
-        const { stdout: branchOut } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeout: 1000, encoding: 'utf8' });
+        const { stdout: branchOut } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true });
         const branch = branchOut.trim();
         if (!branch)
             return null;
@@ -25,7 +25,7 @@ export async function getGitStatus(cwd) {
         let isDirty = false;
         let fileStats;
         try {
-            const { stdout: statusOut } = await execFileAsync('git', ['--no-optional-locks', 'status', '--porcelain'], { cwd, timeout: 1000, encoding: 'utf8' });
+            const { stdout: statusOut } = await execFileAsync('git', ['-c', 'core.quotePath=false', '--no-optional-locks', 'status', '--porcelain'], { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true });
             const trimmed = statusOut.trim();
             isDirty = trimmed.length > 0;
             if (isDirty) {
@@ -39,7 +39,7 @@ export async function getGitStatus(cwd) {
         let ahead = 0;
         let behind = 0;
         try {
-            const { stdout: revOut } = await execFileAsync('git', ['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], { cwd, timeout: 1000, encoding: 'utf8' });
+            const { stdout: revOut } = await execFileAsync('git', ['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], { cwd, timeout: 1000, encoding: 'utf8', windowsHide: true });
             const parts = revOut.trim().split(/\s+/);
             if (parts.length === 2) {
                 behind = parseInt(parts[0], 10) || 0;

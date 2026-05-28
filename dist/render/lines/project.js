@@ -16,8 +16,14 @@ export function renderProjectLine(ctx) {
         const billingLabel = showUsage ? (planName ?? (hasApiKey ? red('API') : undefined)) : undefined;
         const planDisplay = providerLabel ?? billingLabel;
         const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
-        // Append effort level if available and enabled
-        const effort = (display?.showEffort !== false) ? ctx.stdin.effort : undefined;
+        // Append effort level if available and enabled. Claude Code 2.1.115+ sends
+        // effort as { level: "max" }; older versions sent a bare string. Normalize.
+        const rawEffort = (display?.showEffort !== false) ? ctx.stdin.effort : undefined;
+        const effort = typeof rawEffort === 'string'
+            ? rawEffort
+            : (rawEffort && typeof rawEffort === 'object' && typeof rawEffort.level === 'string')
+                ? rawEffort.level
+                : undefined;
         const effortDisplay = effort && effort !== 'high'
             ? `${modelDisplay} | ${dim(effort)}`
             : modelDisplay;
