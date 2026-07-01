@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseTranscript } from '../dist/transcript.js';
 import { countConfigs } from '../dist/config-reader.js';
-import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, isBedrockModelId, stripContextSuffix } from '../dist/stdin.js';
+import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, isBedrockModelId, stripContextSuffix, getEffectiveContextWindowSize } from '../dist/stdin.js';
 import * as fs from 'node:fs';
 
 function restoreEnvVar(name, value) {
@@ -1016,4 +1016,114 @@ test('Issue #3: MCP count updates correctly when servers are disabled', async ()
     process.env.HOME = originalHome;
     await rm(homeDir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Under-reported context window (Bedrock/GovCloud 1M model reported as 200K).
+// Regression: `us-gov.anthropic.claude-opus-4-8` at 440K tokens rendered 100%
+// because Claude Code fell back to a 200K window_size + a clamped used_percentage.
+// The HUD corrects upward only when usage PROVES the reported size is wrong.
+// ---------------------------------------------------------------------------
+
+test('getEffectiveContextWindowSize returns reported size when usage fits', () => {
+  // 55000 used < 200000 reported → trust the reported size unchanged
+  const size = getEffectiveContextWindowSize({
+    context_window: {
+      context_window_size: 200000,
+      current_usage: { input_tokens: 55000 },
+    },
+  });
+  assert.equal(size, 200000);
+});
+
+test('getEffectiveContextWindowSize snaps up to 1M when usage exceeds a 200K report', () => {
+  // 439910 used > 200000 reported → reported size is provably wrong → 1M tier
+  const size = getEffectiveContextWindowSize({
+    context_window: {
+      context_window_size: 200000,
+      current_usage: {
+        input_tokens: 31,
+        cache_creation_input_tokens: 947,
+        cache_read_input_tokens: 438932,
+      },
+    },
+  });
+  assert.equal(size, 1000000);
+});
+
+test('getEffectiveContextWindowSize falls back to usage when it exceeds every known tier', () => {
+  // 1.2M used > 1M largest tier → no standard tier fits → honest 100% (size == used)
+  const size = getEffectiveContextWindowSize({
+    context_window: {
+      context_window_size: 200000,
+      current_usage: { input_tokens: 1200000 },
+    },
+  });
+  assert.equal(size, 1200000);
+});
+
+test('getContextPercent corrects the 440K/200K under-report to ~44% (regression)', () => {
+  // The exact live GovCloud stdin: 439910 tokens, reported 200K window,
+  // Claude Code sent used_percentage:100. HUD must ignore the bad native
+  // value and compute 439910 / 1000000 = 43.99% → 44%.
+  const stdin = {
+    model: { id: 'us-gov.anthropic.claude-opus-4-8', display_name: 'Opus 4.8' },
+    context_window: {
+      context_window_size: 200000,
+      used_percentage: 100,
+      current_usage: {
+        input_tokens: 31,
+        output_tokens: 2738,
+        cache_creation_input_tokens: 947,
+        cache_read_input_tokens: 438932,
+      },
+    },
+  };
+  assert.equal(getContextPercent(stdin), 44);
+});
+
+test('getContextPercent still trusts native used_percentage when usage fits the window', () => {
+  // 55000 used < 200000 reported → NOT under-reported → native value wins,
+  // proving the correction never fires spuriously on a healthy 200K session.
+  const percent = getContextPercent({
+    context_window: {
+      context_window_size: 200000,
+      used_percentage: 28,
+      current_usage: { input_tokens: 55000 },
+    },
+  });
+  assert.equal(percent, 28);
+});
+
+test('getContextPercent does not mask a genuine cap approach on a real 200K model', () => {
+  // 190000 used < 200000 reported → within window → reads a true 95%, NOT
+  // rewritten to 19% against a 1M window. The correction only ever fires when
+  // usage exceeds the reported size.
+  const percent = getContextPercent({
+    context_window: {
+      context_window_size: 200000,
+      current_usage: { input_tokens: 190000 },
+    },
+  });
+  assert.equal(percent, 95);
+});
+
+test('getBufferedPercent uses the corrected 1M window for an under-reported session', () => {
+  // 439910 / 1000000 = 43.99% raw; buffer scales to full above 50% raw usage,
+  // so at 44% raw the scaled buffer is partial. Assert the exact math:
+  //   scale = (0.4399 - 0.05) / (0.50 - 0.05) = 0.8665
+  //   buffer = 1000000 * 0.165 * 0.8665 = 142972
+  //   (439910 + 142972) / 1000000 = 58.29% → 58%
+  const percent = getBufferedPercent({
+    context_window: {
+      context_window_size: 200000,
+      used_percentage: 100,
+      current_usage: {
+        input_tokens: 31,
+        cache_creation_input_tokens: 947,
+        cache_read_input_tokens: 438932,
+      },
+    },
+  });
+  assert.equal(percent, 58);
 });

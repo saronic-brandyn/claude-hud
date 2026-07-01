@@ -151,15 +151,60 @@ function getNativePercent(stdin: StdinData): number | null {
   return null;
 }
 
+/**
+ * Standard Claude context-window tiers, ascending. Every Claude model ships
+ * with either a 200K or a 1M window — there is no other size. Used to recover
+ * the true window when Claude Code under-reports it (below).
+ */
+const STANDARD_CONTEXT_WINDOWS = [200_000, 1_000_000];
+
+/**
+ * True if Claude Code's reported context_window_size is provably wrong because
+ * current usage already exceeds it. No real deployment serves more tokens than
+ * its window, so `used > reported` means the reported size is stale/incorrect.
+ *
+ * Observed on Bedrock/GovCloud model IDs (e.g. `us-gov.anthropic.claude-opus-4-8`)
+ * that Claude Code's model registry doesn't recognize as 1M, so it falls back to
+ * the 200K default — a 440K session then renders as a clamped 100%.
+ */
+function isWindowUnderReported(stdin: StdinData): boolean {
+  const reported = stdin.context_window?.context_window_size ?? 0;
+  return reported > 0 && getTotalTokens(stdin) > reported;
+}
+
+/**
+ * Effective context-window size, correcting a proven Claude Code under-report.
+ * Only ever corrects UPWARD, and only when the token count itself contradicts
+ * the reported size — so it can never mask a genuine cap (e.g. a 1M-capable
+ * model deployed with a 200K limit is left untouched until usage disproves it).
+ * Model-agnostic: no per-model table to fall out of date.
+ */
+export function getEffectiveContextWindowSize(stdin: StdinData): number {
+  const reported = stdin.context_window?.context_window_size ?? 0;
+  const used = getTotalTokens(stdin);
+  if (!isWindowUnderReported(stdin)) {
+    return reported; // reported size is present and consistent with usage
+  }
+  // Reported size is contradicted by usage — snap up to the smallest standard
+  // tier that actually fits (in practice 1M); if usage somehow exceeds every
+  // known tier, fall back to usage itself so the bar reads an honest 100%.
+  const tier = STANDARD_CONTEXT_WINDOWS.find((w) => w >= used);
+  return tier ?? used;
+}
+
 export function getContextPercent(stdin: StdinData): number {
-  // Prefer native percentage (v2.1.6+) - accurate and matches /context
-  const native = getNativePercent(stdin);
-  if (native !== null) {
-    return native;
+  // Prefer native percentage (v2.1.6+) — accurate and matches /context — UNLESS
+  // it's derived from a context_window_size the token count disproves, in which
+  // case the native percentage is itself wrong (a clamped 100%).
+  if (!isWindowUnderReported(stdin)) {
+    const native = getNativePercent(stdin);
+    if (native !== null) {
+      return native;
+    }
   }
 
-  // Fallback: manual calculation without buffer
-  const size = stdin.context_window?.context_window_size;
+  // Manual calculation against the effective (under-report-corrected) size.
+  const size = getEffectiveContextWindowSize(stdin);
   if (!size || size <= 0) {
     return 0;
   }
@@ -169,15 +214,17 @@ export function getContextPercent(stdin: StdinData): number {
 }
 
 export function getBufferedPercent(stdin: StdinData): number {
-  // Prefer native percentage (v2.1.6+) so the HUD matches Claude Code's
-  // own context output. The buffered fallback only approximates older versions.
-  const native = getNativePercent(stdin);
-  if (native !== null) {
-    return native;
+  // Prefer native percentage (v2.1.6+) so the HUD matches Claude Code's own
+  // context output — unless the reported window is under-reported (see above).
+  if (!isWindowUnderReported(stdin)) {
+    const native = getNativePercent(stdin);
+    if (native !== null) {
+      return native;
+    }
   }
 
-  // Fallback: manual calculation with buffer for older Claude Code versions
-  const size = stdin.context_window?.context_window_size;
+  // Manual calculation with buffer against the effective (corrected) size.
+  const size = getEffectiveContextWindowSize(stdin);
   if (!size || size <= 0) {
     return 0;
   }
