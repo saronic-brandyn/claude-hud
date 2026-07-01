@@ -1,6 +1,7 @@
 import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel } from '../stdin.js';
+import { detectBackendProfile, backendProfileLabel } from '../backend.js';
 import { getTokenSpeed } from '../speed-tracker.js';
 import { coloredBar, coloredBarAscii, critical, cyan, dim, green, magenta, red, warning, yellow, getContextColor, quotaBar, quotaBarAscii, claudeOrange, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
@@ -43,12 +44,15 @@ export function renderSessionLine(ctx: RenderContext): string {
 
   // Model and context bar (FIRST)
   // Plan name only shows if showUsage is enabled (respects hybrid toggle)
-  const providerLabel = getProviderLabel(ctx.stdin);
   const showUsage = display?.showUsage !== false;
   const planName = showUsage ? ctx.usageData?.planName : undefined;
   const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+  // Verbatim launch-profile label distinguishes all four backends; a present
+  // OAuth plan name disambiguates claude vs claude-ws under credential-scrub.
+  const profile = detectBackendProfile(ctx.stdin, { hasSubscription: !!planName, hasApiKey });
+  const profileLabel = backendProfileLabel(profile);
   const billingLabel = showUsage ? (planName ?? (hasApiKey ? red('API') : undefined)) : undefined;
-  const planDisplay = providerLabel ?? billingLabel;
+  const planDisplay = profileLabel ?? getProviderLabel(ctx.stdin) ?? billingLabel;
   const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
 
   const deltaStr = ctx.contextDelta
@@ -177,8 +181,14 @@ export function renderSessionLine(ctx: RenderContext): string {
     }
   }
 
-  // Usage limits display (shown when enabled in config, respects usageThreshold)
-  if (display?.showUsage !== false && ctx.usageData && (ctx.usageData.planName || ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null) && !providerLabel) {
+  // Usage limits display (shown when enabled in config, respects usageThreshold).
+  // The 5h/7d OAuth usage API only applies to api.anthropic.com sessions; it is
+  // meaningless for Bedrock/GovCloud. Suppress it for the two Bedrock profiles
+  // (the successor to the old `!providerLabel` gate, which was Bedrock-only),
+  // and show it otherwise — including subscription sessions where it works and
+  // the ambiguous `unknown` state, preserving the prior pass-through behavior.
+  const usageApiApplies = profile !== 'claude-bedrock' && profile !== 'claude-gov';
+  if (display?.showUsage !== false && ctx.usageData && (ctx.usageData.planName || ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null) && usageApiApplies) {
     if (ctx.usageData.apiUnavailable) {
       const errorHint = formatUsageError(ctx.usageData.apiError);
       parts.push(warning(`usage: ${symWarning}${errorHint}`, colors));
