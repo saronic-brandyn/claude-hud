@@ -1,5 +1,6 @@
 import type { RenderContext } from '../../types.js';
 import { getModelName, getProviderLabel } from '../../stdin.js';
+import { detectBackendProfile, backendProfileLabel } from '../../backend.js';
 import { getTokenSpeed } from '../../speed-tracker.js';
 import { cyan, dim, green, magenta, yellow, red, claudeOrange } from '../colors.js';
 
@@ -12,12 +13,19 @@ export function renderProjectLine(ctx: RenderContext): string | null {
 
   if (display?.showModel !== false) {
     const model = getModelName(ctx.stdin);
-    const providerLabel = getProviderLabel(ctx.stdin);
     const showUsage = display?.showUsage !== false;
     const planName = showUsage ? ctx.usageData?.planName : undefined;
     const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+    // Verbatim launch-profile label (claude / claude-ws / claude-bedrock /
+    // claude-gov) is the most specific signal — it distinguishes all four
+    // backends, where getProviderLabel collapses both Bedrock profiles to
+    // "Bedrock". A present OAuth plan name means a real subscription, so it
+    // disambiguates claude vs claude-ws under credential-scrub. Fall back to
+    // the old provider/billing chain only when the profile is unknown.
+    const profile = detectBackendProfile(ctx.stdin, { hasSubscription: !!planName, hasApiKey });
+    const profileLabel = backendProfileLabel(profile);
     const billingLabel = showUsage ? (planName ?? (hasApiKey ? red('API') : undefined)) : undefined;
-    const planDisplay = providerLabel ?? billingLabel;
+    const planDisplay = profileLabel ?? getProviderLabel(ctx.stdin) ?? billingLabel;
     const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
 
     // Append effort level if available and enabled. Claude Code 2.1.115+ sends

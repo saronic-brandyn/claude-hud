@@ -654,7 +654,10 @@ test('renderToolsLine returns null when no tools exist', () => {
 });
 
 // Usage display tests
-test('renderSessionLine displays plan name in model bracket', () => {
+test('renderSessionLine displays the profile label in the model bracket', () => {
+  // Contract change (backend-profile-labels): the bracket now shows the verbatim
+  // launch profile (a present OAuth plan => `claude`), not the plan tier. The
+  // plan/quota still surfaces in the 5h/7d usage bar for subscription sessions.
   const ctx = baseContext();
   ctx.usageData = {
     planName: 'Max',
@@ -665,7 +668,7 @@ test('renderSessionLine displays plan name in model bracket', () => {
   };
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('Opus'), 'should include model name');
-  assert.ok(line.includes('Max'), 'should include plan name');
+  assert.ok(line.includes('[Opus | claude]'), 'bracket shows the claude profile label');
 });
 
 test('renderSessionLine prefers subscription plan over API env var', () => {
@@ -682,8 +685,10 @@ test('renderSessionLine prefers subscription plan over API env var', () => {
 
   try {
     const line = renderSessionLine(ctx);
-    assert.ok(line.includes('Max'), 'should include plan label');
-    assert.ok(!line.includes('API'), 'should not include API label when plan is known');
+    // A present OAuth subscription resolves to the `claude` profile; the API key
+    // (workspace signal) must NOT win, and the raw `API` label must not appear.
+    assert.ok(line.includes('claude'), 'should resolve to the claude profile');
+    assert.ok(!line.includes('| API'), 'should not include API label when subscription is known');
   } finally {
     if (savedApiKey === undefined) {
       delete process.env.ANTHROPIC_API_KEY;
@@ -707,8 +712,10 @@ test('renderProjectLine prefers subscription plan over API env var', () => {
 
   try {
     const line = renderProjectLine(ctx);
-    assert.ok(line?.includes('Pro'), 'should include plan label');
-    assert.ok(!line?.includes('API'), 'should not include API label when plan is known');
+    // A present OAuth subscription (Pro) resolves to the `claude` profile; the
+    // API key must not win, and the raw `API` label must not appear.
+    assert.ok(line?.includes('claude'), 'should resolve to the claude profile');
+    assert.ok(!line?.includes('| API'), 'should not include API label when subscription is known');
   } finally {
     if (savedApiKey === undefined) {
       delete process.env.ANTHROPIC_API_KEY;
@@ -718,7 +725,10 @@ test('renderProjectLine prefers subscription plan over API env var', () => {
   }
 });
 
-test('renderSessionLine shows Bedrock label and hides usage for bedrock model ids', () => {
+test('renderSessionLine shows the bedrock profile label and hides usage for bedrock model ids', () => {
+  // Contract change: a us./anthropic.claude- model id (no gov signal) resolves
+  // to the verbatim `claude-bedrock` profile, superseding the generic `Bedrock`
+  // label. Usage remains hidden — the OAuth quota is meaningless on Bedrock.
   const ctx = baseContext();
   ctx.stdin.model = { display_name: 'Sonnet', id: 'anthropic.claude-3-5-sonnet-20240620-v1:0' };
   ctx.usageData = {
@@ -730,7 +740,7 @@ test('renderSessionLine shows Bedrock label and hides usage for bedrock model id
   };
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('Sonnet'), 'should include model name');
-  assert.ok(line.includes('Bedrock'), 'should include Bedrock label');
+  assert.ok(line.includes('claude-bedrock'), 'should include the claude-bedrock profile label');
   assert.ok(!line.includes('5h:'), 'should hide usage display');
 });
 

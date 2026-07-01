@@ -1127,3 +1127,73 @@ test('getBufferedPercent uses the corrected 1M window for an under-reported sess
   });
   assert.equal(percent, 58);
 });
+
+// ---------------------------------------------------------------------------
+// Proactive 1M correction: a known-1M model reported at exactly the 200K
+// default is corrected from token 1 (before usage crosses 200K), so the bar
+// is right the moment a GovCloud/Bedrock Opus 4.8 session starts.
+// ---------------------------------------------------------------------------
+
+test('getEffectiveContextWindowSize proactively corrects known-1M model at 200K default (low usage)', () => {
+  // 50000 used < 200000 reported, but Opus 4.8 is 1M → correct proactively.
+  const size = getEffectiveContextWindowSize({
+    model: { id: 'us-gov.anthropic.claude-opus-4-8' },
+    context_window: {
+      context_window_size: 200000,
+      current_usage: { input_tokens: 50000 },
+    },
+  });
+  assert.equal(size, 1000000);
+});
+
+test('getContextPercent proactively uses 1M for a fresh GovCloud Opus 4.8 session', () => {
+  // 50000 / 1000000 = 5% (not 50000/200000 = 25%, and not a native 25).
+  const percent = getContextPercent({
+    model: { id: 'us-gov.anthropic.claude-opus-4-8' },
+    context_window: {
+      context_window_size: 200000,
+      used_percentage: 25, // native value derived from the wrong 200K — must be ignored
+      current_usage: { input_tokens: 50000 },
+    },
+  });
+  assert.equal(percent, 5);
+});
+
+test('getEffectiveContextWindowSize does NOT proactively correct a 200K-only model', () => {
+  // Haiku 4.5 is genuinely 200K — must be left at 200K even at the default.
+  const size = getEffectiveContextWindowSize({
+    model: { id: 'claude-haiku-4-5' },
+    context_window: {
+      context_window_size: 200000,
+      current_usage: { input_tokens: 50000 },
+    },
+  });
+  assert.equal(size, 200000);
+});
+
+test('getEffectiveContextWindowSize does NOT proactively correct a deliberate sub-200K cap', () => {
+  // A known-1M model reported at a NON-default size (e.g. an intentional 100K
+  // cap) is treated as intentional — the proactive path only fires at EXACTLY
+  // the 200K default fingerprint.
+  const size = getEffectiveContextWindowSize({
+    model: { id: 'us-gov.anthropic.claude-opus-4-8' },
+    context_window: {
+      context_window_size: 100000,
+      current_usage: { input_tokens: 50000 },
+    },
+  });
+  assert.equal(size, 100000);
+});
+
+test('getEffectiveContextWindowSize leaves a correctly-reported 1M window untouched', () => {
+  // When Claude Code DOES recognize the model (first-party claude-opus-4-8[1m]),
+  // it reports 1000000 directly — nothing to correct.
+  const size = getEffectiveContextWindowSize({
+    model: { id: 'claude-opus-4-8' },
+    context_window: {
+      context_window_size: 1000000,
+      current_usage: { input_tokens: 50000 },
+    },
+  });
+  assert.equal(size, 1000000);
+});

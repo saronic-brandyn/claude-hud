@@ -158,6 +158,35 @@ function getNativePercent(stdin: StdinData): number | null {
  */
 const STANDARD_CONTEXT_WINDOWS = [200_000, 1_000_000];
 
+/** The 200K value Claude Code falls back to for a model its registry doesn't recognize. */
+const DEFAULT_FALLBACK_WINDOW = 200_000;
+
+/**
+ * True if the model is a 1M-context Claude family. Matched by family + version
+ * on the normalized model id, so it works for first-party (`claude-opus-4-8`)
+ * and Bedrock/GovCloud (`us-gov.anthropic.claude-opus-4-8`) id shapes alike.
+ *
+ * Kept intentionally small and current: only families we KNOW ship a 1M window.
+ * A model absent from this list is never upgraded proactively — it can still be
+ * corrected reactively by the usage-exceeds-reported check below, so a genuinely
+ * unknown 1M model isn't stuck at 200K forever, and no non-1M model is ever
+ * inflated. Update when a new 1M family ships.
+ */
+function is1MContextModel(modelId?: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+  const id = modelId.toLowerCase();
+  // Opus 4.6+ and Sonnet 4.6+ (and Fable 5 / Sonnet 5) ship 1M windows.
+  // Haiku and older Sonnet/Opus are 200K — deliberately excluded.
+  return (
+    /\bopus-4-(6|7|8)\b/.test(id)
+    || /\bsonnet-(4-6|5)\b/.test(id)
+    || /\bfable-5\b/.test(id)
+    || /\bopus-4-8\b/.test(id)
+  );
+}
+
 /**
  * True if Claude Code's reported context_window_size is provably wrong because
  * current usage already exceeds it. No real deployment serves more tokens than
@@ -173,30 +202,67 @@ function isWindowUnderReported(stdin: StdinData): boolean {
 }
 
 /**
- * Effective context-window size, correcting a proven Claude Code under-report.
- * Only ever corrects UPWARD, and only when the token count itself contradicts
- * the reported size — so it can never mask a genuine cap (e.g. a 1M-capable
- * model deployed with a 200K limit is left untouched until usage disproves it).
- * Model-agnostic: no per-model table to fall out of date.
+ * True when Claude Code reported exactly its 200K default for a model we KNOW
+ * is 1M — the fingerprint of an unrecognized (e.g. GovCloud/Bedrock) model id.
+ * This is the *proactive* correction: it fires from token 1, before usage has
+ * to climb past 200K to expose the error reactively.
+ *
+ * Scoped tightly to avoid the reachability trap: only when the reported size is
+ * EXACTLY the 200K default. A deliberate sub-200K cap, or any non-default size,
+ * is treated as intentional and left untouched.
+ */
+function isKnown1MUnderDefault(stdin: StdinData): boolean {
+  const reported = stdin.context_window?.context_window_size ?? 0;
+  return reported === DEFAULT_FALLBACK_WINDOW && is1MContextModel(stdin.model?.id);
+}
+
+/**
+ * Effective context-window size, correcting Claude Code's under-reported window.
+ *
+ * Two correction paths, both UPWARD-only:
+ *   - Proactive: a known-1M model reported at exactly the 200K default -> 1M,
+ *     from the first token (fixes the bar before usage crosses 200K).
+ *   - Reactive: usage exceeds the reported size (model-agnostic proof the report
+ *     is wrong) -> smallest standard tier that fits.
+ *
+ * Neither path can mask a genuine cap: the proactive path only fires on the
+ * exact 200K default for a known-1M family, and the reactive path only fires
+ * when the token count itself contradicts the report.
  */
 export function getEffectiveContextWindowSize(stdin: StdinData): number {
   const reported = stdin.context_window?.context_window_size ?? 0;
   const used = getTotalTokens(stdin);
+
+  // Proactive: known-1M model that Claude Code fell back to 200K for.
+  if (isKnown1MUnderDefault(stdin)) {
+    return 1_000_000;
+  }
+
   if (!isWindowUnderReported(stdin)) {
     return reported; // reported size is present and consistent with usage
   }
-  // Reported size is contradicted by usage — snap up to the smallest standard
-  // tier that actually fits (in practice 1M); if usage somehow exceeds every
-  // known tier, fall back to usage itself so the bar reads an honest 100%.
+  // Reactive: reported size is contradicted by usage — snap up to the smallest
+  // standard tier that actually fits (in practice 1M); if usage somehow exceeds
+  // every known tier, fall back to usage itself so the bar reads an honest 100%.
   const tier = STANDARD_CONTEXT_WINDOWS.find((w) => w >= used);
   return tier ?? used;
 }
 
+/**
+ * The native `used_percentage` Claude Code sends is derived from its reported
+ * context_window_size. When we correct that size (proactively for a known-1M
+ * model at the 200K default, or reactively when usage exceeds it), the native
+ * percentage is itself wrong — a clamped/inflated value — so we must recompute
+ * against the effective size instead of trusting it.
+ */
+function shouldOverrideNativePercent(stdin: StdinData): boolean {
+  return isKnown1MUnderDefault(stdin) || isWindowUnderReported(stdin);
+}
+
 export function getContextPercent(stdin: StdinData): number {
   // Prefer native percentage (v2.1.6+) — accurate and matches /context — UNLESS
-  // it's derived from a context_window_size the token count disproves, in which
-  // case the native percentage is itself wrong (a clamped 100%).
-  if (!isWindowUnderReported(stdin)) {
+  // it's derived from a context_window_size we've corrected (see above).
+  if (!shouldOverrideNativePercent(stdin)) {
     const native = getNativePercent(stdin);
     if (native !== null) {
       return native;
@@ -215,8 +281,8 @@ export function getContextPercent(stdin: StdinData): number {
 
 export function getBufferedPercent(stdin: StdinData): number {
   // Prefer native percentage (v2.1.6+) so the HUD matches Claude Code's own
-  // context output — unless the reported window is under-reported (see above).
-  if (!isWindowUnderReported(stdin)) {
+  // context output — unless the reported window has been corrected (see above).
+  if (!shouldOverrideNativePercent(stdin)) {
     const native = getNativePercent(stdin);
     if (native !== null) {
       return native;
