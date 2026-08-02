@@ -34,16 +34,25 @@ const cache = new FileCache<ActionCostCache>({
  *
  * Returns aggregated cost-by-tool-type, sorted descending.
  */
+export type ActionCostDeps = {
+  homeDir: () => string;
+};
+
+const defaultDeps: ActionCostDeps = {
+  homeDir: () => os.homedir(),
+};
+
 export function getActionCosts(
   totalCostUsd: number | undefined,
   tools: ToolEntry[],
   agents: AgentEntry[],
   threshold: number,
   sessionId?: string,
+  overrides: Partial<ActionCostDeps> = {},
 ): ActionCostEntry[] | null {
   if (totalCostUsd == null) return null;
 
-  const homeDir = os.homedir();
+  const homeDir = { ...defaultDeps, ...overrides }.homeDir();
   const prev = cache.read(homeDir, sessionId);
 
   // First invocation — establish baseline
