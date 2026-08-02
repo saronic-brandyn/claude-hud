@@ -143,6 +143,13 @@ export interface TranscriptData {
   tools: ToolEntry[];
   skills: string[];
   mcpServers: string[];
+  /**
+   * MCP servers that returned at least one tool error this session, derived
+   * from `mcp__<server>__<tool>` results carrying is_error. Distinct from
+   * mcpServers, which is a plain activity list — a failing server is worth
+   * surfacing even when the config-count display is otherwise quiet.
+   */
+  mcpErrors: string[];
   agents: AgentEntry[];
   todos: TodoItem[];
   sessionStart?: Date;

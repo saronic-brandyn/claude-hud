@@ -83,6 +83,7 @@ interface SerializedTranscriptData {
   tools: SerializedToolEntry[];
   skills: string[];
   mcpServers: string[];
+  mcpErrors: string[];
   agents: SerializedAgentEntry[];
   todos: TodoItem[];
   sessionStart?: string;
@@ -233,6 +234,7 @@ function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData
     })),
     skills: [...data.skills],
     mcpServers: [...data.mcpServers],
+    mcpErrors: [...data.mcpErrors],
     agents: data.agents.map((agent) => ({
       ...agent,
       startTime: agent.startTime.toISOString(),
@@ -261,6 +263,7 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
     })),
     skills: normalizeNameList(data.skills),
     mcpServers: normalizeNameList(data.mcpServers),
+    mcpErrors: normalizeNameList(data.mcpErrors),
     agents: data.agents.map((agent) => ({
       ...agent,
       model: sanitizeTranscriptModel(agent.model),
@@ -340,6 +343,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     tools: [],
     skills: [],
     mcpServers: [],
+    mcpErrors: [],
     agents: [],
     todos: [],
   };
@@ -366,6 +370,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
   const toolMap = new Map<string, ToolEntry>();
   const skillSet = new Set<string>();
   const mcpServerSet = new Set<string>();
+  const mcpErrorSet = new Set<string>();
   const agentMap = new Map<string, AgentEntry>();
   let latestTodos: TodoItem[] = [];
   const taskIdToIndex = new Map<string, number>();
@@ -518,7 +523,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
             }
           }
         }
-        processEntry(entry, toolMap, skillSet, mcpServerSet, agentMap, taskIdToIndex, latestTodos, result);
+        processEntry(entry, toolMap, skillSet, mcpServerSet, mcpErrorSet, agentMap, taskIdToIndex, latestTodos, result);
       } catch (err) {
         lastUsageKey = undefined;
         debug('Skipping malformed transcript line:', err instanceof Error ? err.message : err);
@@ -548,6 +553,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
   result.tools = Array.from(toolMap.values()).slice(-20);
   result.skills = Array.from(skillSet.values());
   result.mcpServers = Array.from(mcpServerSet.values());
+  result.mcpErrors = Array.from(mcpErrorSet.values());
   result.agents = Array.from(agentMap.values()).slice(-10);
   result.todos = latestTodos;
   result.sessionName = customTitle ?? latestSlug;
@@ -573,6 +579,7 @@ function processEntry(
   toolMap: Map<string, ToolEntry>,
   skillSet: Set<string>,
   mcpServerSet: Set<string>,
+  mcpErrorSet: Set<string>,
   agentMap: Map<string, AgentEntry>,
   taskIdToIndex: Map<string, number>,
   latestTodos: TodoItem[],
@@ -706,6 +713,15 @@ function processEntry(
       if (tool) {
         tool.status = block.is_error ? 'error' : 'completed';
         tool.endTime = timestamp;
+
+        // Attribute a failing MCP tool back to its server so the environment
+        // line can flag it. Names are `mcp__<server>__<tool>`.
+        if (block.is_error && tool.name.startsWith('mcp__')) {
+          const parts = tool.name.split('__');
+          if (parts.length >= 3 && parts[1]) {
+            mcpErrorSet.add(parts[1]);
+          }
+        }
       }
 
       const agent = agentMap.get(block.tool_use_id);

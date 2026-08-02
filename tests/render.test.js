@@ -1132,6 +1132,51 @@ test('renderEnvironmentLine appends output style after config counts', () => {
   assert.ok(line?.includes('style: learning'));
 });
 
+test('renderEnvironmentLine flags MCP servers that returned errors', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = true;
+  ctx.mcpCount = 5;
+  ctx.transcript.mcpErrors = ['github', 'tenable'];
+
+  const line = renderEnvironmentLine(ctx);
+  assert.ok(line?.includes('5 MCPs'), 'count should still render');
+  assert.ok(line?.includes('github, tenable'), 'failing servers should be named');
+  assert.ok(line?.includes('\x1b[31m'), 'error segment should be red');
+});
+
+test('renderEnvironmentLine collapses more than three failing MCPs to a count', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = true;
+  ctx.mcpCount = 9;
+  ctx.transcript.mcpErrors = ['a', 'b', 'c', 'd', 'e'];
+
+  const line = renderEnvironmentLine(ctx);
+  assert.ok(line?.includes('a, b, c +2'), `expected overflow count, got: ${line}`);
+});
+
+// A live fault must not be hidden behind an unrelated display toggle: the
+// config counts are ambient detail people switch off, an erroring server is not.
+test('renderEnvironmentLine surfaces MCP errors even when config counts are off', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = false;
+  ctx.mcpCount = 5;
+  ctx.transcript.mcpErrors = ['airlock'];
+
+  const line = renderEnvironmentLine(ctx);
+  assert.ok(line, 'a failing MCP must render a line even with counts disabled');
+  assert.ok(line.includes('airlock'), `expected the failing server, got: ${line}`);
+  assert.ok(!line.includes('5 MCPs'), 'counts stay suppressed; only the fault shows');
+});
+
+test('renderEnvironmentLine stays null when nothing is enabled and no MCP errors', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = false;
+  ctx.mcpCount = 5;
+  ctx.transcript.mcpErrors = [];
+
+  assert.equal(renderEnvironmentLine(ctx), null);
+});
+
 test('renderEnvironmentLine treats missing showConfigCounts as disabled in expanded layout', () => {
   const ctx = baseContext();
   ctx.config.lineLayout = 'expanded';
