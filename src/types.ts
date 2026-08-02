@@ -3,6 +3,7 @@ import type { GitStatus } from './git.js';
 import type { AuthInfo } from './auth.js';
 import type { BackendProfile } from './backend.js';
 import type { CompactionEvent } from './compaction-detector.js';
+import type { QueryCostInfo } from './query-cost.js';
 
 export interface StdinData {
   transcript_path?: string;
@@ -211,4 +212,11 @@ export interface RenderContext {
   compaction?: CompactionEvent | null;
   /** Token delta since the previous tick (see context-velocity.ts). */
   contextDelta?: number | null;
+  /**
+   * Cost of the CURRENT query (see query-cost.ts), derived from deltas in
+   * cumulative total_cost_usd. Distinct from cost.ts, which reports the
+   * session TOTAL -- 'what did that turn cost' and 'what has today cost' are
+   * different questions and only the second has an upstream answer.
+   */
+  queryCost?: QueryCostInfo | null;
 }

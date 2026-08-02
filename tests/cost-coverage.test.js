@@ -225,3 +225,43 @@ test('estimateSessionCost handles model being undefined', () => {
   const result = estimateSessionCost({}, tokens);
   assert.equal(result, null);
 });
+
+// --- per-query cost on the session cost line (fork feature) ---
+// The session total only climbs, so it cannot answer "is THIS turn expensive?".
+import { renderCostEstimate } from '../dist/render/lines/cost.js';
+
+function costCtx(overrides = {}) {
+  return {
+    stdin: {
+      model: { display_name: 'Claude Opus 4.5' },
+      cost: { total_cost_usd: 1.5 },
+    },
+    transcript: { sessionTokens: undefined },
+    config: { display: { showCost: true } },
+    ...overrides,
+  };
+}
+
+test('renderCostEstimate shows session cost alone when no query is active', () => {
+  const line = renderCostEstimate(costCtx({ queryCost: { cost: 0.25, isActive: false } }));
+  assert.ok(line?.includes('$1.50'), `expected session total, got: ${line}`);
+  assert.ok(!line?.includes('this query'), 'inactive query must not render');
+});
+
+test('renderCostEstimate appends the current query cost while active', () => {
+  const line = renderCostEstimate(costCtx({ queryCost: { cost: 0.25, isActive: true } }));
+  assert.ok(line?.includes('$1.50'), 'session total should still render');
+  assert.ok(line?.includes('this query'), `expected query segment, got: ${line}`);
+  assert.ok(line?.includes('$0.25'), `expected query cost, got: ${line}`);
+});
+
+test('renderCostEstimate omits a zero-cost active query', () => {
+  const line = renderCostEstimate(costCtx({ queryCost: { cost: 0, isActive: true } }));
+  assert.ok(!line?.includes('this query'), 'a $0.00 query is noise, not signal');
+});
+
+test('renderCostEstimate is unaffected when queryCost is absent entirely', () => {
+  const line = renderCostEstimate(costCtx());
+  assert.ok(line?.includes('$1.50'));
+  assert.ok(!line?.includes('this query'));
+});

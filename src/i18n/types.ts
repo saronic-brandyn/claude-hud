@@ -16,6 +16,7 @@ export type MessageKey =
   | "label.compactions"
   | "label.compactionApproaching"
   | "label.compacted"
+  | "label.thisQuery"
   // Status
   | "status.limitReached"
   | "status.allTodosComplete"

@@ -217,6 +217,8 @@ export interface HudConfig {
     showCompactions: boolean;
     /** Predictive compaction state: an approaching warning + post-compaction delta. */
     showCompactionState: boolean;
+    /** Append the current query's cost to the session cost line. */
+    showQueryCost: boolean;
     /** Per-tick token delta next to the context percentage. */
     showContextDelta: boolean;
     mergeGroups: HudElement[][];
@@ -325,6 +327,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showLastResponseAt: false,
     showCompactions: false,
     showCompactionState: true,
+    showQueryCost: false,
     showContextDelta: false,
     mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
     autocompactBuffer: 'enabled',
@@ -812,6 +815,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showCompactionState: typeof migrated.display?.showCompactionState === 'boolean'
       ? migrated.display.showCompactionState
       : DEFAULT_CONFIG.display.showCompactionState,
+    showQueryCost: typeof migrated.display?.showQueryCost === 'boolean'
+      ? migrated.display.showQueryCost
+      : DEFAULT_CONFIG.display.showQueryCost,
     showContextDelta: typeof migrated.display?.showContextDelta === 'boolean'
       ? migrated.display.showContextDelta
       : DEFAULT_CONFIG.display.showContextDelta,

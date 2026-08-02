@@ -13,6 +13,7 @@ import { resolveEffortLevel } from "./effort.js";
 import { detectBackendProfile } from "./backend.js";
 import { detectCompaction } from "./compaction-detector.js";
 import { getContextVelocity } from "./context-velocity.js";
+import { getQueryCost } from "./query-cost.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
@@ -226,6 +227,9 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     const contextDelta = config.display.showContextDelta === true
       ? getContextVelocity(stdin, { sessionId: sessionKey }).delta
       : null;
+    const queryCost = config.display.showQueryCost === true
+      ? getQueryCost(stdin.cost?.total_cost_usd ?? undefined, { sessionId: sessionKey })
+      : null;
 
     const ctx: RenderContext = {
       stdin,
@@ -248,6 +252,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       backendProfile,
       compaction,
       contextDelta,
+      queryCost,
     };
 
     deps.render(ctx);

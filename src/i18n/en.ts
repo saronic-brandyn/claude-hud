@@ -18,6 +18,7 @@ export const en: Messages = {
   "label.compactions": "Compactions",
   "label.compactionApproaching": "compacting soon",
   "label.compacted": "compacted",
+  "label.thisQuery": "this query",
 
   // Status
   "status.limitReached": "Limit reached",

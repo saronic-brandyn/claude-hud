@@ -16,5 +16,15 @@ export function renderCostEstimate(ctx: RenderContext): string | null {
   }
 
   const labelKey = cost.source === 'native' ? 'label.cost' : 'label.estimatedCost';
-  return label(`${t(labelKey)} ${formatUsd(cost.totalUsd)}`, ctx.config?.colors);
+  const session = `${t(labelKey)} ${formatUsd(cost.totalUsd)}`;
+
+  // Append the CURRENT query's cost while it is in flight. The session total
+  // only ever climbs, so it cannot answer "is this particular turn expensive?"
+  // — which is the question you can still act on.
+  const query = ctx.queryCost;
+  if (query?.isActive && query.cost > 0) {
+    return label(`${session} (${t('label.thisQuery')} ${formatUsd(query.cost)})`, ctx.config?.colors);
+  }
+
+  return label(session, ctx.config?.colors);
 }
