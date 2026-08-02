@@ -10,6 +10,7 @@ import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
 import { resolveEffortLevel } from "./effort.js";
+import { detectBackendProfile } from "./backend.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
@@ -193,6 +194,18 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
         ? deps.readAuthInfo()
         : null;
 
+    // Launch-profile detection. Bedrock/GovCloud are resolved purely from
+    // stdin + env, so they work regardless of auth state. The subscription-vs-
+    // workspace split needs an auth signal, which is only on hand when the auth
+    // display is enabled; absent it, detectBackendProfile returns `unknown` and
+    // the renderer falls back to upstream's provider label. That is deliberate —
+    // ANTHROPIC_API_KEY is scrubbed from the status-line subprocess, so guessing
+    // would mislabel rather than degrade.
+    const backendProfile = detectBackendProfile(stdin, {
+      hasSubscription: !!authInfo?.method && authInfo.method !== "API Key",
+      hasApiKey: authInfo?.method === "API Key",
+    });
+
     const ctx: RenderContext = {
       stdin,
       transcript,
@@ -211,6 +224,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       effortLevel: effortInfo?.level,
       effortSymbol: effortInfo?.symbol,
       authInfo,
+      backendProfile,
     };
 
     deps.render(ctx);

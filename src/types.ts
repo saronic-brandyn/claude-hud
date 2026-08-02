@@ -1,6 +1,7 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
 import type { AuthInfo } from './auth.js';
+import type { BackendProfile } from './backend.js';
 
 export interface StdinData {
   transcript_path?: string;
@@ -189,4 +190,8 @@ export interface RenderContext {
   // Auth method + account for the current login (see auth.ts). Only populated
   // when display.showAuth or display.showAuthUser is enabled.
   authInfo?: AuthInfo | null;
+  // Which launch profile is active (see backend.ts). Precomputed here rather
+  // than derived in the renderer because detection may read auth state, and
+  // the render path runs on every status-line tick.
+  backendProfile?: BackendProfile;
 }
