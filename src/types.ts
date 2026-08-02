@@ -2,6 +2,7 @@ import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
 import type { AuthInfo } from './auth.js';
 import type { BackendProfile } from './backend.js';
+import type { CompactionEvent } from './compaction-detector.js';
 
 export interface StdinData {
   transcript_path?: string;
@@ -201,4 +202,13 @@ export interface RenderContext {
   // than derived in the renderer because detection may read auth state, and
   // the render path runs on every status-line tick.
   backendProfile?: BackendProfile;
+  /**
+   * Live compaction state (see compaction-detector.ts): an `approaching`
+   * warning before it happens and a `compacted` delta just after. Distinct
+   * from transcript.compactionCount, which is a retrospective tally — this is
+   * the predictive half, and it is the half you can still act on.
+   */
+  compaction?: CompactionEvent | null;
+  /** Token delta since the previous tick (see context-velocity.ts). */
+  contextDelta?: number | null;
 }

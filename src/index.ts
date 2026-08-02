@@ -1,4 +1,4 @@
-import { readStdin, getUsageFromStdin } from "./stdin.js";
+import { readStdin, getUsageFromStdin, getContextPercent } from "./stdin.js";
 import { parseTranscript } from "./transcript.js";
 import { render } from "./render/index.js";
 import { countConfigs } from "./config-reader.js";
@@ -11,6 +11,8 @@ import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
 import { resolveEffortLevel } from "./effort.js";
 import { detectBackendProfile } from "./backend.js";
+import { detectCompaction } from "./compaction-detector.js";
+import { getContextVelocity } from "./context-velocity.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
@@ -21,6 +23,7 @@ import type { HudConfig } from "./config.js";
 export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 export type MainDeps = {
   readStdin: typeof readStdin;
@@ -206,6 +209,24 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       hasApiKey: authInfo?.method === "API Key",
     });
 
+    // Compaction state and token velocity are both derived by comparing this
+    // tick against the previous one, so they are stateful across invocations
+    // (FileCache) and must be computed exactly once per run.
+    //
+    // Session key follows context-cache.ts: a sha256 of the transcript path.
+    // The fork previously read stdin.session_id, which upstream's StdinData
+    // does not model; hashing the transcript path keys the same thing without
+    // asserting an unmodelled field, and keeps concurrent sessions isolated.
+    const sessionKey = stdin.transcript_path
+      ? createHash("sha256").update(stdin.transcript_path).digest("hex")
+      : undefined;
+    const compaction = config.display.showCompactionState !== false
+      ? detectCompaction(getContextPercent(stdin), { sessionId: sessionKey })
+      : null;
+    const contextDelta = config.display.showContextDelta === true
+      ? getContextVelocity(stdin, { sessionId: sessionKey }).delta
+      : null;
+
     const ctx: RenderContext = {
       stdin,
       transcript,
@@ -225,6 +246,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       effortSymbol: effortInfo?.symbol,
       authInfo,
       backendProfile,
+      compaction,
+      contextDelta,
     };
 
     deps.render(ctx);

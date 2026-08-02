@@ -215,6 +215,10 @@ export interface HudConfig {
     // Show how many context compactions (manual /compact or auto) have
     // occurred this session, counted from transcript compact_boundary entries.
     showCompactions: boolean;
+    /** Predictive compaction state: an approaching warning + post-compaction delta. */
+    showCompactionState: boolean;
+    /** Per-tick token delta next to the context percentage. */
+    showContextDelta: boolean;
     mergeGroups: HudElement[][];
     autocompactBuffer: AutocompactBufferMode;
     contextWarningThreshold: number;
@@ -320,6 +324,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     showSessionStartDate: false,
     showLastResponseAt: false,
     showCompactions: false,
+    showCompactionState: true,
+    showContextDelta: false,
     mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
     autocompactBuffer: 'enabled',
     contextWarningThreshold: 70,
@@ -803,6 +809,12 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showCompactions: typeof migrated.display?.showCompactions === 'boolean'
       ? migrated.display.showCompactions
       : DEFAULT_CONFIG.display.showCompactions,
+    showCompactionState: typeof migrated.display?.showCompactionState === 'boolean'
+      ? migrated.display.showCompactionState
+      : DEFAULT_CONFIG.display.showCompactionState,
+    showContextDelta: typeof migrated.display?.showContextDelta === 'boolean'
+      ? migrated.display.showContextDelta
+      : DEFAULT_CONFIG.display.showContextDelta,
     mergeGroups: validateMergeGroups(migrated.display?.mergeGroups),
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer
