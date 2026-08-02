@@ -1,4 +1,5 @@
 import { getProviderLabel } from '../stdin.js';
+import { backendProfileLabel } from '../backend.js';
 export function formatModelDisplay(model, ctx) {
     let effortSuffix = '';
     if (ctx.effortLevel && ctx.effortSymbol) {
@@ -8,7 +9,11 @@ export function formatModelDisplay(model, ctx) {
         effortSuffix = ` ${ctx.effortLevel}`;
     }
     const display = ctx.config?.display;
-    const autoProvider = getProviderLabel(ctx.stdin);
+    // The launch-profile label is strictly more specific than getProviderLabel,
+    // which collapses commercial Bedrock and GovCloud Bedrock to a single
+    // "Bedrock". Prefer it; fall back when the profile is `unknown` (label null).
+    const autoProvider = (ctx.backendProfile ? backendProfileLabel(ctx.backendProfile) : null)
+        ?? getProviderLabel(ctx.stdin);
     if (display?.showProvider) {
         const providerLabel = display.providerName?.trim() || autoProvider;
         const core = `${model}${effortSuffix}`;

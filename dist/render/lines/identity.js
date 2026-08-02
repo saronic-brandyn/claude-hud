@@ -27,6 +27,20 @@ export function renderIdentityLine(ctx, labelOptions = {}) {
     let line = display?.showContextBar !== false
         ? `${progressLabel("label.context", colors, labelOptions)} ${coloredBar(percent, getAdaptiveBarWidth(), colors, contextThresholds)} ${contextValueDisplay}`
         : `${progressLabel("label.context", colors, labelOptions)} ${contextValueDisplay}`;
+    // Per-tick token delta — the rate at which this session is consuming
+    // context, which the static percentage cannot show.
+    if (ctx.contextDelta != null && ctx.contextDelta !== 0) {
+        const sign = ctx.contextDelta > 0 ? "+" : "";
+        line += label(` ${sign}${formatTokens(ctx.contextDelta)}`, colors);
+    }
+    // Compaction state. `approaching` is the half worth having: upstream's
+    // showCompactions is a retrospective tally, whereas this fires BEFORE the
+    // compaction while there is still time to wrap up or /compact deliberately.
+    if (ctx.compaction) {
+        line += ctx.compaction.state === "approaching"
+            ? ` ${getContextColor(100, colors, contextThresholds)}${t("label.compactionApproaching")}${RESET}`
+            : ` ${getContextColor(0, colors, contextThresholds)}${t("label.compacted")}${ctx.compaction.delta ? ` -${ctx.compaction.delta}%` : ""}${RESET}`;
+    }
     if (display?.showTokenBreakdown !== false && percent >= (display?.contextCriticalThreshold ?? 85)) {
         const usage = ctx.stdin.context_window?.current_usage;
         if (usage) {

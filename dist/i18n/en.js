@@ -14,6 +14,9 @@ export const en = {
     "label.lastReply": "Last reply",
     "label.advisor": "Advisor",
     "label.compactions": "Compactions",
+    "label.compactionApproaching": "compacting soon",
+    "label.compacted": "compacted",
+    "label.thisQuery": "this query",
     // Status
     "status.limitReached": "Limit reached",
     "status.allTodosComplete": "All todos complete",

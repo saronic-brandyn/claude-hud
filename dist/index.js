@@ -1,4 +1,4 @@
-import { readStdin, getUsageFromStdin } from "./stdin.js";
+import { readStdin, getUsageFromStdin, getContextPercent } from "./stdin.js";
 import { parseTranscript } from "./transcript.js";
 import { render } from "./render/index.js";
 import { countConfigs } from "./config-reader.js";
@@ -10,12 +10,18 @@ import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
 import { resolveEffortLevel } from "./effort.js";
+import { detectBackendProfile } from "./backend.js";
+import { detectCompaction } from "./compaction-detector.js";
+import { getContextVelocity } from "./context-velocity.js";
+import { getQueryCost } from "./query-cost.js";
+import { getActionCosts } from "./action-cost.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
 export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
 /**
  * Returns true when the HUD is disabled for this invocation via the
  * CLAUDE_HUD_DISABLE environment variable. Any non-blank value other than an
@@ -144,6 +150,40 @@ export async function main(overrides = {}) {
         const authInfo = config.display.showAuth || config.display.showAuthUser
             ? deps.readAuthInfo()
             : null;
+        // Launch-profile detection. Bedrock/GovCloud are resolved purely from
+        // stdin + env, so they work regardless of auth state. The subscription-vs-
+        // workspace split needs an auth signal, which is only on hand when the auth
+        // display is enabled; absent it, detectBackendProfile returns `unknown` and
+        // the renderer falls back to upstream's provider label. That is deliberate —
+        // ANTHROPIC_API_KEY is scrubbed from the status-line subprocess, so guessing
+        // would mislabel rather than degrade.
+        const backendProfile = detectBackendProfile(stdin, {
+            hasSubscription: !!authInfo?.method && authInfo.method !== "API Key",
+            hasApiKey: authInfo?.method === "API Key",
+        });
+        // Compaction state and token velocity are both derived by comparing this
+        // tick against the previous one, so they are stateful across invocations
+        // (FileCache) and must be computed exactly once per run.
+        //
+        // Session key follows context-cache.ts: a sha256 of the transcript path.
+        // The fork previously read stdin.session_id, which upstream's StdinData
+        // does not model; hashing the transcript path keys the same thing without
+        // asserting an unmodelled field, and keeps concurrent sessions isolated.
+        const sessionKey = stdin.transcript_path
+            ? createHash("sha256").update(stdin.transcript_path).digest("hex")
+            : undefined;
+        const compaction = config.display.showCompactionState !== false
+            ? detectCompaction(getContextPercent(stdin), { sessionId: sessionKey })
+            : null;
+        const contextDelta = config.display.showContextDelta === true
+            ? getContextVelocity(stdin, { sessionId: sessionKey }).delta
+            : null;
+        const queryCost = config.display.showQueryCost === true
+            ? getQueryCost(stdin.cost?.total_cost_usd ?? undefined, { sessionId: sessionKey })
+            : null;
+        const actionCosts = config.display.showCostByAction === true
+            ? getActionCosts(stdin.cost?.total_cost_usd ?? undefined, transcript.tools, transcript.agents, config.display.costByActionThreshold, sessionKey)
+            : null;
         const ctx = {
             stdin,
             transcript,
@@ -162,6 +202,11 @@ export async function main(overrides = {}) {
             effortLevel: effortInfo?.level,
             effortSymbol: effortInfo?.symbol,
             authInfo,
+            backendProfile,
+            compaction,
+            contextDelta,
+            queryCost,
+            actionCosts,
         };
         deps.render(ctx);
     }

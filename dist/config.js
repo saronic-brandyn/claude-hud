@@ -101,6 +101,11 @@ export const DEFAULT_CONFIG = {
         showSessionStartDate: false,
         showLastResponseAt: false,
         showCompactions: false,
+        showCompactionState: true,
+        showQueryCost: false,
+        showCostByAction: false,
+        costByActionThreshold: 0.01,
+        showContextDelta: false,
         mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
         autocompactBuffer: 'enabled',
         contextWarningThreshold: 70,
@@ -521,6 +526,23 @@ export function mergeConfig(userConfig) {
         showCompactions: typeof migrated.display?.showCompactions === 'boolean'
             ? migrated.display.showCompactions
             : DEFAULT_CONFIG.display.showCompactions,
+        showCompactionState: typeof migrated.display?.showCompactionState === 'boolean'
+            ? migrated.display.showCompactionState
+            : DEFAULT_CONFIG.display.showCompactionState,
+        showQueryCost: typeof migrated.display?.showQueryCost === 'boolean'
+            ? migrated.display.showQueryCost
+            : DEFAULT_CONFIG.display.showQueryCost,
+        showCostByAction: typeof migrated.display?.showCostByAction === 'boolean'
+            ? migrated.display.showCostByAction
+            : DEFAULT_CONFIG.display.showCostByAction,
+        costByActionThreshold: typeof migrated.display?.costByActionThreshold === 'number'
+            && Number.isFinite(migrated.display.costByActionThreshold)
+            && migrated.display.costByActionThreshold >= 0
+            ? migrated.display.costByActionThreshold
+            : DEFAULT_CONFIG.display.costByActionThreshold,
+        showContextDelta: typeof migrated.display?.showContextDelta === 'boolean'
+            ? migrated.display.showContextDelta
+            : DEFAULT_CONFIG.display.showContextDelta,
         mergeGroups: validateMergeGroups(migrated.display?.mergeGroups),
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer

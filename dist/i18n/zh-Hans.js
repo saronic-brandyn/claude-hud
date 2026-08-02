@@ -14,6 +14,9 @@ export const zhHans = {
     "label.lastReply": "上次回复",
     "label.advisor": "顾问",
     "label.compactions": "压缩次数",
+    "label.compactionApproaching": "即将压缩",
+    "label.compacted": "已压缩",
+    "label.thisQuery": "本次查询",
     // Status
     "status.limitReached": "已达上限",
     "status.allTodosComplete": "全部完成",

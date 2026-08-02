@@ -1,6 +1,10 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
 import type { AuthInfo } from './auth.js';
+import type { BackendProfile } from './backend.js';
+import type { CompactionEvent } from './compaction-detector.js';
+import type { QueryCostInfo } from './query-cost.js';
+import type { ActionCostEntry } from './action-cost.js';
 export interface StdinData {
     transcript_path?: string;
     cwd?: string;
@@ -127,6 +131,13 @@ export interface TranscriptData {
     tools: ToolEntry[];
     skills: string[];
     mcpServers: string[];
+    /**
+     * MCP servers that returned at least one tool error this session, derived
+     * from `mcp__<server>__<tool>` results carrying is_error. Distinct from
+     * mcpServers, which is a plain activity list — a failing server is worth
+     * surfacing even when the config-count display is otherwise quiet.
+     */
+    mcpErrors: string[];
     agents: AgentEntry[];
     todos: TodoItem[];
     sessionStart?: Date;
@@ -158,5 +169,28 @@ export interface RenderContext {
     effortLevel?: string;
     effortSymbol?: string;
     authInfo?: AuthInfo | null;
+    backendProfile?: BackendProfile;
+    /**
+     * Live compaction state (see compaction-detector.ts): an `approaching`
+     * warning before it happens and a `compacted` delta just after. Distinct
+     * from transcript.compactionCount, which is a retrospective tally — this is
+     * the predictive half, and it is the half you can still act on.
+     */
+    compaction?: CompactionEvent | null;
+    /** Token delta since the previous tick (see context-velocity.ts). */
+    contextDelta?: number | null;
+    /**
+     * Cost of the CURRENT query (see query-cost.ts), derived from deltas in
+     * cumulative total_cost_usd. Distinct from cost.ts, which reports the
+     * session TOTAL -- 'what did that turn cost' and 'what has today cost' are
+     * different questions and only the second has an upstream answer.
+     */
+    queryCost?: QueryCostInfo | null;
+    /**
+     * Session cost attributed by tool type (see action-cost.ts). Answers
+     * "where is the money going", which neither the session total nor the
+     * per-query figure can.
+     */
+    actionCosts?: ActionCostEntry[] | null;
 }
 //# sourceMappingURL=types.d.ts.map

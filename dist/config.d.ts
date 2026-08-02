@@ -123,6 +123,16 @@ export interface HudConfig {
         showSessionStartDate: boolean;
         showLastResponseAt: boolean;
         showCompactions: boolean;
+        /** Predictive compaction state: an approaching warning + post-compaction delta. */
+        showCompactionState: boolean;
+        /** Append the current query's cost to the session cost line. */
+        showQueryCost: boolean;
+        /** Break the session cost down by tool type. */
+        showCostByAction: boolean;
+        /** Hide action-cost entries below this dollar amount. */
+        costByActionThreshold: number;
+        /** Per-tick token delta next to the context percentage. */
+        showContextDelta: boolean;
         mergeGroups: HudElement[][];
         autocompactBuffer: AutocompactBufferMode;
         contextWarningThreshold: number;
