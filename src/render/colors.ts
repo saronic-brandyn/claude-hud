@@ -2,8 +2,7 @@ import type { HudColorName, HudColorValue, HudColorOverrides } from '../config.j
 
 export const RESET = '\x1b[0m';
 
-const DIM_FALLBACK = '\x1b[2m';
-let resolvedDim = DIM_FALLBACK;
+const DIM = '\x1b[2m';
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -14,6 +13,7 @@ const BRIGHT_MAGENTA = '\x1b[95m';
 const CLAUDE_ORANGE = '\x1b[38;5;208m';
 
 const ANSI_BY_NAME: Record<HudColorName, string> = {
+  dim: DIM,
   red: RED,
   green: GREEN,
   yellow: YELLOW,
@@ -48,13 +48,12 @@ function resolveAnsi(value: HudColorValue | undefined, fallback: string): string
   return ANSI_BY_NAME[value as HudColorName] ?? fallback;
 }
 
-/** Initialize color overrides from config. Call once before rendering. */
-export function initColors(overrides?: Partial<HudColorOverrides>): void {
-  resolvedDim = resolveAnsi(overrides?.dim, DIM_FALLBACK);
-}
-
 function colorize(text: string, color: string): string {
   return `${color}${text}${RESET}`;
+}
+
+function withOverride(text: string, value: HudColorValue | undefined, fallback: string): string {
+  return colorize(text, resolveAnsi(value, fallback));
 }
 
 export function green(text: string): string {
@@ -78,11 +77,35 @@ export function magenta(text: string): string {
 }
 
 export function dim(text: string): string {
-  return colorize(text, resolvedDim);
+  return colorize(text, DIM);
 }
 
 export function claudeOrange(text: string): string {
   return colorize(text, CLAUDE_ORANGE);
+}
+
+export function model(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.model, CYAN);
+}
+
+export function project(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.project, YELLOW);
+}
+
+export function git(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.git, MAGENTA);
+}
+
+export function gitBranch(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.gitBranch, CYAN);
+}
+
+export function label(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.label, DIM);
+}
+
+export function custom(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.custom, CLAUDE_ORANGE);
 }
 
 export function warning(text: string, colors?: Partial<HudColorOverrides>): string {
@@ -93,9 +116,20 @@ export function critical(text: string, colors?: Partial<HudColorOverrides>): str
   return colorize(text, resolveAnsi(colors?.critical, RED));
 }
 
-export function getContextColor(percent: number, colors?: Partial<HudColorOverrides>): string {
-  if (percent >= 85) return resolveAnsi(colors?.critical, RED);
-  if (percent >= 70) return resolveAnsi(colors?.warning, YELLOW);
+export interface ContextThresholds {
+  warning?: number;
+  critical?: number;
+}
+
+export function getContextColor(
+  percent: number,
+  colors?: Partial<HudColorOverrides>,
+  thresholds?: ContextThresholds,
+): string {
+  const critical = thresholds?.critical ?? 85;
+  const warning = thresholds?.warning ?? 70;
+  if (percent >= critical) return resolveAnsi(colors?.critical, RED);
+  if (percent >= warning) return resolveAnsi(colors?.warning, YELLOW);
   return resolveAnsi(colors?.context, GREEN);
 }
 
@@ -111,32 +145,23 @@ export function quotaBar(percent: number, width: number = 10, colors?: Partial<H
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
   const color = getQuotaColor(safePercent, colors);
-  return `${color}${'█'.repeat(filled)}${resolvedDim}${'░'.repeat(empty)}${RESET}`;
+  const filledChar = colors?.barFilled ?? '█';
+  const emptyChar = colors?.barEmpty ?? '░';
+  return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
 }
 
-export function coloredBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
+export function coloredBar(
+  percent: number,
+  width: number = 10,
+  colors?: Partial<HudColorOverrides>,
+  thresholds?: ContextThresholds,
+): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
-  const color = getContextColor(safePercent, colors);
-  return `${color}${'█'.repeat(filled)}${resolvedDim}${'░'.repeat(empty)}${RESET}`;
-}
-
-export function quotaBarAscii(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
-  const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
-  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-  const filled = Math.round((safePercent / 100) * safeWidth);
-  const empty = safeWidth - filled;
-  const color = getQuotaColor(safePercent, colors);
-  return `${color}${'#'.repeat(filled)}${resolvedDim}${'-'.repeat(empty)}${RESET}`;
-}
-
-export function coloredBarAscii(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
-  const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
-  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-  const filled = Math.round((safePercent / 100) * safeWidth);
-  const empty = safeWidth - filled;
-  const color = getContextColor(safePercent, colors);
-  return `${color}${'#'.repeat(filled)}${resolvedDim}${'-'.repeat(empty)}${RESET}`;
+  const color = getContextColor(safePercent, colors, thresholds);
+  const filledChar = colors?.barFilled ?? '█';
+  const emptyChar = colors?.barEmpty ?? '░';
+  return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { FileCache } from '../dist/file-cache.js';
+import { FileCache, getCacheDir, _sweepCacheForTests } from '../dist/file-cache.js';
 
 let tmpDir;
 
@@ -66,8 +66,85 @@ test('FileCache session ID is truncated to 12 chars in filename', () => {
   const longId = 'abcdefghijklmnopqrstuvwxyz';
   numCache.write(tmpDir, { value: 99 }, longId);
 
-  const dir = path.join(tmpDir, '.claude', 'plugins', 'claude-hud');
-  const files = fs.readdirSync(dir);
+  const files = fs.readdirSync(getCacheDir(tmpDir));
   const match = files.find(f => f.includes('abcdefghijkl') && !f.includes('abcdefghijklm'));
   assert.ok(match, `expected truncated session ID in filename, got: ${files.join(', ')}`);
+});
+
+test('FileCache writes into the hud-cache subdirectory, not the plugin root', () => {
+  numCache.write(tmpDir, { value: 1 }, 'sess-a');
+
+  const pluginRoot = path.join(tmpDir, '.claude', 'plugins', 'claude-hud');
+  const rootFiles = fs.readdirSync(pluginRoot).filter(f =>
+    fs.statSync(path.join(pluginRoot, f)).isFile());
+  assert.deepEqual(rootFiles, [],
+    `cache must not litter the plugin root, found: ${rootFiles.join(', ')}`);
+  assert.ok(fs.existsSync(getCacheDir(tmpDir)), 'hud-cache subdirectory should exist');
+});
+
+test('sweep removes cache entries older than the 7-day max age', () => {
+  numCache.write(tmpDir, { value: 1 }, 'old-session');
+  const dir = getCacheDir(tmpDir);
+  const [entry] = fs.readdirSync(dir);
+  const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  fs.utimesSync(path.join(dir, entry), stale, stale);
+
+  _sweepCacheForTests(tmpDir, Date.now());
+
+  assert.deepEqual(fs.readdirSync(dir), [], 'aged-out entry should be swept');
+});
+
+test('sweep keeps cache entries inside the max age', () => {
+  numCache.write(tmpDir, { value: 1 }, 'fresh-session');
+
+  _sweepCacheForTests(tmpDir, Date.now());
+
+  assert.equal(fs.readdirSync(getCacheDir(tmpDir)).length, 1, 'fresh entry must survive');
+});
+
+// Regression: a writer killed between writeFileSync and renameSync skips
+// atomicWriteFileSync's catch-block cleanup, orphaning the .tmp. Measured on a
+// real host: 87 orphaned .tmp files, all from FileCache consumers.
+test('sweep removes orphaned .tmp files left by a killed writer', () => {
+  numCache.write(tmpDir, { value: 1 }, 'sess');
+  const dir = getCacheDir(tmpDir);
+  const orphan = path.join(dir, '.velocity-cache.abc.json.9999.tmp');
+  fs.writeFileSync(orphan, '{}', 'utf8');
+  const stale = new Date(Date.now() - 10 * 60 * 1000);
+  fs.utimesSync(orphan, stale, stale);
+
+  _sweepCacheForTests(tmpDir, Date.now());
+
+  assert.ok(!fs.existsSync(orphan), 'orphaned .tmp older than 5min should be swept');
+  assert.equal(fs.readdirSync(dir).length, 1, 'the real cache entry must survive');
+});
+
+test('sweep leaves a fresh .tmp alone (a concurrent write is in flight)', () => {
+  const dir = getCacheDir(tmpDir);
+  fs.mkdirSync(dir, { recursive: true });
+  const inflight = path.join(dir, '.cost-cache.xyz.json.1234.tmp');
+  fs.writeFileSync(inflight, '{}', 'utf8');
+
+  _sweepCacheForTests(tmpDir, Date.now());
+
+  assert.ok(fs.existsSync(inflight), 'a just-written .tmp must not be swept');
+});
+
+test('sweep enforces the 100-entry cap, evicting oldest first', () => {
+  const dir = getCacheDir(tmpDir);
+  fs.mkdirSync(dir, { recursive: true });
+  // 105 entries, mtimes ascending so the 5 oldest are deterministic.
+  for (let i = 0; i < 105; i += 1) {
+    const p = path.join(dir, `entry-${String(i).padStart(3, '0')}.json`);
+    fs.writeFileSync(p, '{}', 'utf8');
+    const t = new Date(Date.now() - (105 - i) * 60 * 1000);
+    fs.utimesSync(p, t, t);
+  }
+
+  _sweepCacheForTests(tmpDir, Date.now());
+
+  const survivors = fs.readdirSync(dir).sort();
+  assert.equal(survivors.length, 100, 'cap should be enforced');
+  assert.ok(!survivors.includes('entry-000.json'), 'oldest entry should be evicted');
+  assert.ok(survivors.includes('entry-104.json'), 'newest entry must survive');
 });

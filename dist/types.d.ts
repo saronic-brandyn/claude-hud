@@ -1,38 +1,23 @@
 import type { HudConfig } from './config.js';
-import type { CompactionEvent } from './compaction-detector.js';
 import type { GitStatus } from './git.js';
-import type { ActionCostEntry } from './action-cost.js';
+import type { AuthInfo } from './auth.js';
 export interface StdinData {
-    session_id?: string;
     transcript_path?: string;
     cwd?: string;
+    workspace?: {
+        current_dir?: string;
+        project_dir?: string;
+        added_dirs?: string[];
+        git_worktree?: string;
+    } | null;
     model?: {
         id?: string;
         display_name?: string;
     };
-    workspace?: {
-        current_dir?: string;
-        project_dir?: string;
-    };
-    version?: string;
-    output_style?: {
-        name?: string;
-    };
-    effort?: string | {
-        level?: string | null;
-        [key: string]: unknown;
-    } | null;
-    cost?: {
-        total_cost_usd?: number;
-        total_duration_ms?: number;
-        total_api_duration_ms?: number;
-        total_lines_added?: number;
-        total_lines_removed?: number;
-    };
     context_window?: {
         context_window_size?: number;
-        total_input_tokens?: number;
-        total_output_tokens?: number;
+        total_input_tokens?: number | null;
+        total_output_tokens?: number | null;
         current_usage?: {
             input_tokens?: number;
             output_tokens?: number;
@@ -42,16 +27,38 @@ export interface StdinData {
         used_percentage?: number | null;
         remaining_percentage?: number | null;
     };
+    cost?: {
+        total_cost_usd?: number | null;
+        total_duration_ms?: number | null;
+        total_api_duration_ms?: number | null;
+        total_lines_added?: number | null;
+        total_lines_removed?: number | null;
+    } | null;
     rate_limits?: {
         five_hour?: {
-            used_percentage?: number;
-            resets_at?: string;
-        };
+            used_percentage?: number | null;
+            resets_at?: number | null;
+        } | null;
         seven_day?: {
-            used_percentage?: number;
-            resets_at?: string;
-        };
-    };
+            used_percentage?: number | null;
+            resets_at?: number | null;
+        } | null;
+        /**
+         * Model-scoped weekly windows (e.g. the Fable weekly quota shown on /usage).
+         * Additive field — Claude Code's internal status schema defines it as
+         * { display_name, utilization (0-100 percent), resets_at (ISO-8601) } and only
+         * includes it when the server returns per-model windows.
+         */
+        model_scoped?: Array<{
+            display_name?: string | null;
+            utilization?: number | null;
+            resets_at?: string | null;
+        }> | null;
+    } | null;
+    effort?: string | {
+        level?: string | null;
+        [key: string]: unknown;
+    } | null;
 }
 export interface ToolEntry {
     id: string;
@@ -69,35 +76,69 @@ export interface AgentEntry {
     status: 'running' | 'completed';
     startTime: Date;
     endTime?: Date;
+    background?: boolean;
 }
 export interface TodoItem {
     content: string;
     status: 'pending' | 'in_progress' | 'completed';
 }
-/** Usage window data from the OAuth API */
-export interface UsageWindow {
-    utilization: number | null;
-    resetAt: Date | null;
-}
 export interface UsageData {
-    planName: string | null;
     fiveHour: number | null;
     sevenDay: number | null;
     fiveHourResetAt: Date | null;
     sevenDayResetAt: Date | null;
-    apiUnavailable?: boolean;
-    apiError?: string;
+    balanceLabel?: string | null;
+    /** Model-scoped weekly windows (e.g. Fable) from stdin rate_limits.model_scoped. */
+    scopedWindows?: ScopedUsageWindow[];
+}
+/** One model-scoped weekly quota window (e.g. label "Fable", used percent 0-100). */
+export interface ScopedUsageWindow {
+    label: string;
+    percent: number | null;
+    resetAt: Date | null;
+}
+export interface ExternalUsageSnapshot {
+    five_hour?: {
+        used_percentage?: number | null;
+        resets_at?: string | number | null;
+    } | null;
+    seven_day?: {
+        used_percentage?: number | null;
+        resets_at?: string | number | null;
+    } | null;
+    updated_at?: string | number | null;
+    balance_label?: string | null;
+}
+export interface MemoryInfo {
+    totalBytes: number;
+    usedBytes: number;
+    freeBytes: number;
+    usedPercent: number;
 }
 /** Check if usage limit is reached (either window at 100%) */
 export declare function isLimitReached(data: UsageData): boolean;
+export interface SessionTokenUsage {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+}
 export interface TranscriptData {
     tools: ToolEntry[];
+    skills: string[];
+    mcpServers: string[];
     agents: AgentEntry[];
     todos: TodoItem[];
     sessionStart?: Date;
     sessionName?: string;
-    /** MCP servers that had at least one tool_result with is_error */
-    mcpErrors: Set<string>;
+    lastAssistantResponseAt?: Date;
+    sessionTokens?: SessionTokenUsage;
+    lastCompactBoundaryAt?: Date;
+    lastCompactPostTokens?: number;
+    compactionCount?: number;
+    advisorModel?: string;
+    ultracodeActive?: boolean;
+    lastAssistantModel?: string;
 }
 export interface RenderContext {
     stdin: StdinData;
@@ -109,16 +150,13 @@ export interface RenderContext {
     sessionDuration: string;
     gitStatus: GitStatus | null;
     usageData: UsageData | null;
+    memoryUsage: MemoryInfo | null;
     config: HudConfig;
     extraLabel: string | null;
-    contextVelocity: number | null;
-    contextDelta: number | null;
-    compactionEvent: CompactionEvent | null;
-    costData: StdinData['cost'] | null;
-    queryCost: {
-        cost: number;
-        isActive: boolean;
-    } | null;
-    actionCosts: ActionCostEntry[] | null;
+    outputStyle?: string;
+    claudeCodeVersion?: string;
+    effortLevel?: string;
+    effortSymbol?: string;
+    authInfo?: AuthInfo | null;
 }
 //# sourceMappingURL=types.d.ts.map

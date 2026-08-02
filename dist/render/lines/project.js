@@ -1,124 +1,224 @@
-import { getModelName, getProviderLabel } from '../../stdin.js';
-import { getTokenSpeed } from '../../speed-tracker.js';
-import { cyan, dim, green, magenta, yellow, red, claudeOrange } from '../colors.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { formatModelName, resolveModelName } from '../../stdin.js';
+import { getOutputSpeed } from '../../speed-tracker.js';
+import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor } from '../colors.js';
+import { t } from '../../i18n/index.js';
+import { renderCostEstimate } from './cost.js';
+import { renderAdvisorLine } from './advisor.js';
+import { normalizeAddedDirs, sanitize as sanitizeDisplayText, basenameOf, truncateBasename, MAX_RENDERED_ADDED_DIRS } from './added-dirs.js';
+import { getFileHref, safeHyperlink } from '../../utils/hyperlinks.js';
+import { formatModelDisplay } from '../model-display.js';
+import { formatAuthSegment } from '../../auth.js';
+import { formatProjectPath } from '../project-path.js';
+import { DEFAULT_CONFIG, DEFAULT_PROJECT_LINE_ORDER } from '../../config.js';
+import { orderFirstLineParts } from '../first-line-order.js';
+import { getVcsDisplayState } from '../vcs-status.js';
+function resolvePathWithinCwd(cwd, candidatePath) {
+    const resolvedCwd = path.resolve(cwd);
+    const resolvedPath = path.resolve(cwd, candidatePath);
+    const relative = path.relative(resolvedCwd, resolvedPath);
+    if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+        return resolvedPath;
+    }
+    return null;
+}
 export function renderProjectLine(ctx) {
     const display = ctx.config?.display;
-    const ascii = display?.asciiMode ?? false;
-    const symDeleted = ascii ? 'x' : '✘';
-    const symDuration = ascii ? 'T:' : '⏱️ ';
+    const colors = ctx.config?.colors;
     const parts = [];
+    const push = (text, key = null) => parts.push({ key, text });
+    const customLine = display?.customLine;
+    const customLinePosition = display?.customLinePosition ?? 'last';
+    if (customLine && customLinePosition === 'first') {
+        push(customColor(customLine, colors));
+    }
     if (display?.showModel !== false) {
-        const model = getModelName(ctx.stdin);
-        const providerLabel = getProviderLabel(ctx.stdin);
-        const showUsage = display?.showUsage !== false;
-        const planName = showUsage ? ctx.usageData?.planName : undefined;
-        const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
-        const billingLabel = showUsage ? (planName ?? (hasApiKey ? red('API') : undefined)) : undefined;
-        const planDisplay = providerLabel ?? billingLabel;
-        const modelDisplay = planDisplay ? `${model} | ${planDisplay}` : model;
-        // Append effort level if available and enabled. Claude Code 2.1.115+ sends
-        // effort as { level: "max" }; older versions sent a bare string. Normalize.
-        const rawEffort = (display?.showEffort !== false) ? ctx.stdin.effort : undefined;
-        const effort = typeof rawEffort === 'string'
-            ? rawEffort
-            : (rawEffort && typeof rawEffort === 'object' && typeof rawEffort.level === 'string')
-                ? rawEffort.level
-                : undefined;
-        const effortDisplay = effort && effort !== 'high'
-            ? `${modelDisplay} | ${dim(effort)}`
-            : modelDisplay;
-        parts.push(cyan(`[${effortDisplay}]`));
+        const model = formatModelName(resolveModelName(ctx.stdin, ctx.transcript, ctx.config?.display?.modelSource), ctx.config?.display?.modelFormat, ctx.config?.display?.modelOverride);
+        const modelDisplay = formatModelDisplay(model, ctx);
+        push(modelColor(`[${modelDisplay}]`, colors), 'model');
     }
     let projectPart = null;
-    const projectDir = ctx.stdin.workspace?.project_dir ?? ctx.stdin.workspace?.current_dir ?? ctx.stdin.cwd;
-    if (display?.showProject !== false && projectDir) {
-        const segments = projectDir.split(/[/\\]/).filter(Boolean);
+    if (display?.showProject !== false && ctx.stdin.cwd) {
         const pathLevels = ctx.config?.pathLevels ?? 1;
-        const projectPath = segments.length > 0 ? segments.slice(-pathLevels).join('/') : '/';
-        projectPart = yellow(projectPath);
+        const projectPath = formatProjectPath(ctx.stdin.cwd, pathLevels);
+        const coloredProject = projectColor(projectPath, colors);
+        projectPart = safeHyperlink(getFileHref(ctx.stdin.cwd), coloredProject);
+    }
+    let addedDirsPart = null;
+    const addedDirs = normalizeAddedDirs(ctx.stdin.workspace?.added_dirs);
+    const addedDirsLayout = display?.addedDirsLayout ?? 'inline';
+    if (display?.showAddedDirs !== false && addedDirsLayout === 'inline' && addedDirs.length > 0) {
+        const visible = addedDirs.slice(0, MAX_RENDERED_ADDED_DIRS);
+        const overflow = addedDirs.length - visible.length;
+        const rendered = visible.map((dir) => {
+            const name = truncateBasename(sanitizeDisplayText(basenameOf(dir)));
+            const text = dim(`+${name}`);
+            return safeHyperlink(getFileHref(dir), text);
+        });
+        if (overflow > 0) {
+            rendered.push(dim(`+${overflow} more`));
+        }
+        addedDirsPart = rendered.join(' ');
     }
     let gitPart = '';
-    const gitConfig = ctx.config?.gitStatus;
-    const showGit = gitConfig?.enabled ?? true;
-    if (showGit && ctx.gitStatus) {
-        const gitParts = [ctx.gitStatus.branch];
-        if ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty) {
-            gitParts.push('*');
+    const vcs = getVcsDisplayState(ctx.gitStatus, ctx.config);
+    const gitConfig = ctx.config.gitStatus ?? DEFAULT_CONFIG.gitStatus;
+    const branchOverflow = vcs?.branchOverflow ?? gitConfig.branchOverflow;
+    if (vcs) {
+        const branchText = vcs.branch + (vcs.dirty ? '*' : '');
+        const coloredBranch = gitBranchColor(branchText, colors);
+        const linkedBranch = safeHyperlink(vcs.branchUrl, coloredBranch);
+        const gitInner = [linkedBranch];
+        if (vcs.ahead > 0) {
+            gitInner.push(formatAheadCount(vcs.ahead, gitConfig, colors));
         }
-        if (gitConfig?.showAheadBehind) {
-            if (ctx.gitStatus.ahead > 0) {
-                gitParts.push(` ↑${ctx.gitStatus.ahead}`);
-            }
-            if (ctx.gitStatus.behind > 0) {
-                gitParts.push(` ↓${ctx.gitStatus.behind}`);
-            }
-        }
-        if (gitConfig?.showFileStats && ctx.gitStatus.fileStats) {
-            const { modified, added, deleted, untracked } = ctx.gitStatus.fileStats;
-            const statParts = [];
-            if (modified > 0)
-                statParts.push(`!${modified}`);
+        if (vcs.behind > 0)
+            gitInner.push(gitBranchColor(`↓${vcs.behind}`, colors));
+        if (vcs.lineDiff) {
+            const { added, deleted } = vcs.lineDiff;
+            const diffParts = [];
             if (added > 0)
-                statParts.push(`+${added}`);
+                diffParts.push(green(`+${added}`));
             if (deleted > 0)
-                statParts.push(`${symDeleted}${deleted}`);
-            if (untracked > 0)
-                statParts.push(`?${untracked}`);
-            if (statParts.length > 0) {
-                gitParts.push(` ${statParts.join(' ')}`);
+                diffParts.push(red(`-${deleted}`));
+            if (diffParts.length > 0) {
+                gitInner.push(`[${diffParts.join(' ')}]`);
             }
         }
-        gitPart = `${magenta('git:(')}${cyan(gitParts.join(''))}${magenta(')')}`;
+        if (vcs.conflict) {
+            gitInner.push(criticalColor('!conflict', colors));
+        }
+        const vcsLabel = vcs.kind === 'jj' ? 'jj:(' : 'git:(';
+        gitPart = `${gitColor(vcsLabel, colors)}${gitInner.join(' ')}${gitColor(')', colors)}`;
     }
-    if (projectPart && gitPart) {
-        parts.push(`${projectPart} ${gitPart}`);
+    const projectWithDirs = projectPart && addedDirsPart
+        ? `${projectPart} ${addedDirsPart}`
+        : projectPart ?? addedDirsPart;
+    if (projectWithDirs && gitPart) {
+        if (branchOverflow === 'wrap') {
+            push(projectWithDirs, 'project');
+            push(gitPart, 'project');
+        }
+        else {
+            push(`${projectWithDirs} ${gitPart}`, 'project');
+        }
     }
-    else if (projectPart) {
-        parts.push(projectPart);
+    else if (projectWithDirs) {
+        push(projectWithDirs, 'project');
     }
     else if (gitPart) {
-        parts.push(gitPart);
+        push(gitPart, 'project');
+    }
+    // Advisor model sits inline with the model/project/git badge so the
+    // configured /advisor is visible on the first line at a glance.
+    if (display?.showAdvisor) {
+        const advisorPart = renderAdvisorLine(ctx);
+        if (advisorPart) {
+            push(advisorPart, 'advisor');
+        }
     }
     if (display?.showSessionName && ctx.transcript.sessionName) {
-        parts.push(dim(ctx.transcript.sessionName));
+        push(label(ctx.transcript.sessionName, colors), 'sessionName');
+    }
+    if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
+        push(label(`CC v${ctx.claudeCodeVersion}`, colors), 'version');
     }
     if (ctx.extraLabel) {
-        parts.push(dim(ctx.extraLabel));
+        push(label(ctx.extraLabel, colors), 'extra');
     }
-    if ((display?.showLinesChanged ?? true) && ctx.stdin.cost) {
-        const la = ctx.stdin.cost.total_lines_added;
-        const lr = ctx.stdin.cost.total_lines_removed;
-        if (la || lr) {
-            const lParts = [];
-            if (la)
-                lParts.push(green(`+${la}`));
-            if (lr)
-                lParts.push(red(`-${lr}`));
-            parts.push(dim(lParts.join(' ')));
-        }
+    if (display?.showDuration === true && ctx.sessionDuration) {
+        push(label(`⏱️  ${ctx.sessionDuration}`, colors), 'duration');
+    }
+    const costEstimate = renderCostEstimate(ctx);
+    if (costEstimate) {
+        push(costEstimate, 'cost');
     }
     if (display?.showSpeed) {
-        const speeds = getTokenSpeed(ctx.stdin);
-        if (speeds) {
-            const speedParts = [];
-            if (speeds.input !== null)
-                speedParts.push(`in: ${speeds.input.toFixed(0)}`);
-            if (speeds.output !== null)
-                speedParts.push(`out: ${speeds.output.toFixed(0)}`);
-            if (speedParts.length > 0)
-                parts.push(dim(`${speedParts.join(' ')} tok/s`));
+        const speed = getOutputSpeed(ctx.stdin);
+        if (speed !== null) {
+            push(label(`${t('format.out')}: ${speed.toFixed(1)} ${t('format.tokPerSec')}`, colors), 'speed');
         }
     }
-    if (display?.showDuration !== false && ctx.sessionDuration) {
-        parts.push(dim(`${symDuration} ${ctx.sessionDuration}`));
+    const authSegment = formatAuthSegment(ctx.authInfo, display);
+    if (authSegment) {
+        push(label(authSegment, colors), 'auth');
     }
-    const customLine = display?.customLine;
-    if (customLine) {
-        parts.push(claudeOrange(customLine));
+    if (customLine && customLinePosition === 'last') {
+        push(customColor(customLine, colors));
     }
     if (parts.length === 0) {
         return null;
     }
-    return parts.join(' \u2502 ');
+    const order = ctx.config?.projectLineOrder ?? DEFAULT_PROJECT_LINE_ORDER;
+    return orderFirstLineParts(parts, order).join(' \u2502 ');
+}
+function formatAheadCount(ahead, gitConfig, colors) {
+    const value = `↑${ahead}`;
+    const criticalThreshold = gitConfig?.pushCriticalThreshold ?? 0;
+    const warningThreshold = gitConfig?.pushWarningThreshold ?? 0;
+    if (criticalThreshold > 0 && ahead >= criticalThreshold) {
+        return criticalColor(value, colors);
+    }
+    if (warningThreshold > 0 && ahead >= warningThreshold) {
+        return warningColor(value, colors);
+    }
+    return gitBranchColor(value, colors);
+}
+export function renderGitFilesLine(ctx, terminalWidth = null) {
+    const gitConfig = ctx.config?.gitStatus;
+    if (!(gitConfig?.showFileStats ?? false))
+        return null;
+    if (!ctx.gitStatus?.fileStats)
+        return null;
+    const { trackedFiles, untracked } = ctx.gitStatus.fileStats;
+    if (trackedFiles.length === 0 && untracked === 0)
+        return null;
+    if (terminalWidth !== null && terminalWidth < 60)
+        return null;
+    const cwd = ctx.stdin.cwd;
+    const sorted = [...trackedFiles].sort((a, b) => {
+        try {
+            const aPath = cwd ? resolvePathWithinCwd(cwd, a.fullPath) : null;
+            const bPath = cwd ? resolvePathWithinCwd(cwd, b.fullPath) : null;
+            const aMtime = aPath ? fs.statSync(aPath).mtimeMs : 0;
+            const bMtime = bPath ? fs.statSync(bPath).mtimeMs : 0;
+            return bMtime - aMtime;
+        }
+        catch {
+            return 0;
+        }
+    });
+    const shown = sorted.slice(0, 6);
+    const overflow = sorted.length - shown.length;
+    const statParts = [];
+    for (const trackedFile of shown) {
+        const prefix = trackedFile.type === 'added' ? green('+') : trackedFile.type === 'deleted' ? red('-') : yellow('~');
+        const safeBasename = sanitizeDisplayText(trackedFile.basename);
+        const coloredName = trackedFile.type === 'added'
+            ? green(safeBasename)
+            : trackedFile.type === 'deleted'
+                ? red(safeBasename)
+                : yellow(safeBasename);
+        const resolvedPath = cwd ? resolvePathWithinCwd(cwd, trackedFile.fullPath) : null;
+        const linkedName = resolvedPath ? safeHyperlink(getFileHref(resolvedPath), coloredName) : coloredName;
+        let entry = `${prefix}${linkedName}`;
+        if (trackedFile.lineDiff) {
+            const diffParts = [];
+            if (trackedFile.lineDiff.added > 0)
+                diffParts.push(green(`+${trackedFile.lineDiff.added}`));
+            if (trackedFile.lineDiff.deleted > 0)
+                diffParts.push(red(`-${trackedFile.lineDiff.deleted}`));
+            if (diffParts.length > 0) {
+                entry += dim(`(${diffParts.join(' ')})`);
+            }
+        }
+        statParts.push(entry);
+    }
+    if (overflow > 0)
+        statParts.push(dim(`+${overflow} more`));
+    if (untracked > 0)
+        statParts.push(dim(`?${untracked}`));
+    return statParts.join('  ');
 }
 //# sourceMappingURL=project.js.map

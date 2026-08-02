@@ -16,12 +16,17 @@ Real-time statusline showing context usage, active tools, running agents, and to
 /plugin install claude-hud
 ```
 
+Then reload plugins (no restart needed):
+```
+/reload-plugins
+```
+
 **Step 3: Configure the statusline**
 ```
 /claude-hud:setup
 ```
 
-Done. Restart Claude Code to load the new statusLine config, then the HUD will appear.
+Done. Claude Code reloads settings automatically — the HUD appears after your next message, no restart needed. (On older Claude Code versions, restart if it doesn't show.)
 
 ---
 
@@ -54,6 +59,11 @@ Run this command in Claude Code:
 /plugin install claude-hud
 ```
 
+Then reload plugins so the setup skill is available in this session:
+```
+/reload-plugins
+```
+
 ### Step 4: Configure the Statusline
 
 Run this command in Claude Code:
@@ -67,7 +77,7 @@ This adds the statusLine configuration to the user's settings.json.
 
 Tell the user:
 - Installation complete
-- Restart Claude Code to load the statusline config, then the HUD will appear
+- Settings reload automatically — the HUD appears after their next message, no restart needed (on older Claude Code versions, restart if it doesn't show)
 - It shows: context usage, active tools, running agents, and todo progress
 
 ### Step 6: Ask About Starring (Optional)
@@ -76,7 +86,11 @@ Ask the user: "Would you like to star the repository to support the project?"
 
 Only if they explicitly agree, run:
 ```bash
-gh repo star jarrodwatts/claude-hud
+if gh help repo 2>/dev/null | grep -q "star:"; then
+  gh repo star jarrodwatts/claude-hud
+else
+  gh api -X PUT /user/starred/jarrodwatts/claude-hud
+fi
 ```
 
 Never run this automatically without user consent.
@@ -104,8 +118,8 @@ Technical documentation for agents who need to understand, modify, or debug Clau
 
 <architecture>
   <overview>
-    Claude HUD is a statusline plugin invoked by Claude Code every ~300ms.
-    It reads data from two sources, renders up to 4 lines, and outputs to stdout.
+    Claude HUD is a statusline plugin invoked by Claude Code after each interaction (debounced at 300ms).
+    It reads official statusline data from stdin plus local transcript/config data, renders up to 4 lines, and outputs to stdout.
   </overview>
 
   <data_flow>
@@ -122,6 +136,10 @@ Technical documentation for agents who need to understand, modify, or debug Clau
       <field path="model.display_name">Current model name (Opus, Sonnet, Haiku)</field>
       <field path="context_window.current_usage.input_tokens">Current token count</field>
       <field path="context_window.context_window_size">Maximum context size</field>
+      <field path="rate_limits.five_hour.used_percentage">Subscriber 5-hour rate limit usage when provided</field>
+      <field path="rate_limits.five_hour.resets_at">5-hour rate limit reset timestamp when provided</field>
+      <field path="rate_limits.seven_day.used_percentage">Subscriber 7-day rate limit usage when provided</field>
+      <field path="rate_limits.seven_day.resets_at">7-day rate limit reset timestamp when provided</field>
       <field path="transcript_path">Path to session transcript JSONL file</field>
       <field path="cwd">Current working directory</field>
     </stdin_json>
@@ -170,11 +188,6 @@ Technical documentation for agents who need to understand, modify, or debug Clau
       Gets branch name, dirty state, and ahead/behind counts.
       Uses execFile with array args for safe command execution.
     </file>
-    <file name="usage-api.ts" purpose="Fetch usage from Anthropic API">
-      Reads OAuth credentials from ~/.claude/.credentials.json.
-      Calls api.anthropic.com/api/oauth/usage endpoint (opt-in).
-      Caches results (60s success, 15s failure).
-    </file>
     <file name="types.ts" purpose="TypeScript interfaces">
       StdinData, ToolEntry, AgentEntry, TodoItem, TranscriptData, RenderContext.
     </file>
@@ -186,7 +199,7 @@ Technical documentation for agents who need to understand, modify, or debug Clau
       Conditionally shows lines based on data presence.
     </file>
     <file name="session-line.ts" purpose="Line 1: Session info">
-      Renders: [Model | Plan] █████░░░░░ 45% | project git:(branch) | 2 CLAUDE.md | 5h: 25% | ⏱️ 5m
+      Renders: [Model] █████░░░░░ 45% | project git:(branch) | 2 CLAUDE.md | 5h: 25% | ⏱️ 5m
       Context bar colors: green (&lt;70%), yellow (70-85%), red (&gt;85%).
     </file>
     <file name="tools-line.ts" purpose="Line 2: Tool activity">
@@ -210,7 +223,7 @@ Technical documentation for agents who need to understand, modify, or debug Clau
 
 <output_format>
   <line number="1" name="session" always_shown="true">
-    [Model | Plan] █████░░░░░ 45% | project git:(branch) | 2 CLAUDE.md | 5h: 25% | ⏱️ 5m
+    [Model] █████░░░░░ 45% | project git:(branch) | 2 CLAUDE.md | 5h: 25% | ⏱️ 5m
   </line>
   <line number="2" name="tools" shown_if="any tools used">
     ◐ Edit: auth.ts | ✓ Read ×3 | ✓ Grep ×2
@@ -307,7 +320,7 @@ Technical documentation for agents who need to understand, modify, or debug Clau
 
   <issue name="Context percentage seems wrong">
     <cause>Data comes directly from Claude Code - it's accurate</cause>
-    <solution>The percentage is (input_tokens / context_window_size) * 100</solution>
+    <solution>Claude HUD uses Claude Code's native context_window.used_percentage when available, then falls back to token-based calculation for older versions.</solution>
   </issue>
 
   <issue name="Tools/agents not showing">
@@ -327,7 +340,7 @@ Technical documentation for agents who need to understand, modify, or debug Clau
     transcript_path?: string
     cwd?: string
     model?: { id?: string, display_name?: string }
-    context_window?: { context_window_size?: number, current_usage?: { input_tokens?: number } }
+    context_window?: { used_percentage?: number, context_window_size?: number, current_usage?: { input_tokens?: number } }
   </interface>
 
   <interface name="ToolEntry">
@@ -375,7 +388,7 @@ Technical documentation for agents who need to understand, modify, or debug Clau
     1. Clone the repo or navigate to the plugin directory
     2. Make changes following the file_structure section
     3. Run npm run build to compile
-    4. Restart Claude Code to see changes
+    4. Changes appear on the next statusline refresh — send a message to trigger one (no restart needed; the statusLine command re-runs each refresh)
   </modify>
 
   <debug>

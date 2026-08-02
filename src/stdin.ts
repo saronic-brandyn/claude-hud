@@ -1,5 +1,15 @@
-import type { StdinData } from './types.js';
+import type { ScopedUsageWindow, StdinData, UsageData, TranscriptData } from './types.js';
+import type { ModelFormatMode } from './config.js';
 import { AUTOCOMPACT_BUFFER_PERCENT } from './constants.js';
+import { createDebug } from './debug.js';
+import { sanitizeTranscriptModel } from './model-source.js';
+import { sanitizeDisplayText } from './utils/sanitize.js';
+
+const debug = createDebug('stdin');
+
+const SCOPED_USAGE_MAX_WINDOWS = 8;
+const SCOPED_USAGE_LABEL_MAX_LENGTH = 64;
+const SCOPED_USAGE_RESET_MAX_LENGTH = 64;
 
 type StdinStream = Pick<NodeJS.ReadStream, 'setEncoding' | 'on' | 'off' | 'pause'> & {
   isTTY?: boolean;
@@ -29,7 +39,8 @@ export async function readStdin(
 
   try {
     stream.setEncoding('utf8');
-  } catch {
+  } catch (err) {
+    debug('Failed to set stream encoding:', err);
     return null;
   }
 
@@ -72,7 +83,8 @@ export async function readStdin(
 
       try {
         return JSON.parse(trimmed) as StdinData;
-      } catch {
+      } catch (err) {
+        debug('JSON parse incomplete/invalid, waiting for more data');
         return undefined;
       }
     };
@@ -114,7 +126,8 @@ export async function readStdin(
       finish(parsed ?? null);
     };
 
-    const onError = (): void => {
+    const onError = (err: Error): void => {
+      debug('stdin stream error:', err);
       finish(null);
     };
 
@@ -142,135 +155,35 @@ export function getTotalTokens(stdin: StdinData): number {
 /**
  * Get native percentage from Claude Code v2.1.6+ if available.
  * Returns null if not available or invalid, triggering fallback to manual calculation.
+ *
+ * A value of 0 is treated as "not yet populated": on a fresh session Claude Code
+ * may emit used_percentage=0 before the first API response arrives, while
+ * current_usage already contains the real initial-context tokens (system prompt,
+ * tools, memory files, etc.).  Falling through to the token-based calculation
+ * ensures those tokens are reflected in the context bar from the very first tick.
  */
 function getNativePercent(stdin: StdinData): number | null {
   const nativePercent = stdin.context_window?.used_percentage;
-  if (typeof nativePercent === 'number' && !Number.isNaN(nativePercent)) {
+  if (typeof nativePercent === 'number' && !Number.isNaN(nativePercent) && nativePercent > 0) {
     return Math.min(100, Math.max(0, Math.round(nativePercent)));
   }
   return null;
 }
 
-/**
- * Standard Claude context-window tiers, ascending. Every Claude model ships
- * with either a 200K or a 1M window — there is no other size. Used to recover
- * the true window when Claude Code under-reports it (below).
- */
-const STANDARD_CONTEXT_WINDOWS = [200_000, 1_000_000];
-
-/** The 200K value Claude Code falls back to for a model its registry doesn't recognize. */
-const DEFAULT_FALLBACK_WINDOW = 200_000;
-
-/**
- * True if the model is a 1M-context Claude family. Matched by family + version
- * on the normalized model id, so it works for first-party (`claude-opus-4-8`)
- * and Bedrock/GovCloud (`us-gov.anthropic.claude-opus-4-8`) id shapes alike.
- *
- * Kept intentionally small and current: only families we KNOW ship a 1M window.
- * A model absent from this list is never upgraded proactively — it can still be
- * corrected reactively by the usage-exceeds-reported check below, so a genuinely
- * unknown 1M model isn't stuck at 200K forever, and no non-1M model is ever
- * inflated. Update when a new 1M family ships.
- */
-function is1MContextModel(modelId?: string): boolean {
-  if (!modelId) {
-    return false;
-  }
-  const id = modelId.toLowerCase();
-  // Opus 4.6+ and Sonnet 4.6+ (and Fable 5 / Sonnet 5) ship 1M windows.
-  // Haiku and older Sonnet/Opus are 200K — deliberately excluded.
-  return (
-    /\bopus-4-(6|7|8)\b/.test(id)
-    || /\bsonnet-(4-6|5)\b/.test(id)
-    || /\bfable-5\b/.test(id)
-    || /\bopus-4-8\b/.test(id)
-  );
-}
-
-/**
- * True if Claude Code's reported context_window_size is provably wrong because
- * current usage already exceeds it. No real deployment serves more tokens than
- * its window, so `used > reported` means the reported size is stale/incorrect.
- *
- * Observed on Bedrock/GovCloud model IDs (e.g. `us-gov.anthropic.claude-opus-4-8`)
- * that Claude Code's model registry doesn't recognize as 1M, so it falls back to
- * the 200K default — a 440K session then renders as a clamped 100%.
- */
-function isWindowUnderReported(stdin: StdinData): boolean {
-  const reported = stdin.context_window?.context_window_size ?? 0;
-  return reported > 0 && getTotalTokens(stdin) > reported;
-}
-
-/**
- * True when Claude Code reported exactly its 200K default for a model we KNOW
- * is 1M — the fingerprint of an unrecognized (e.g. GovCloud/Bedrock) model id.
- * This is the *proactive* correction: it fires from token 1, before usage has
- * to climb past 200K to expose the error reactively.
- *
- * Scoped tightly to avoid the reachability trap: only when the reported size is
- * EXACTLY the 200K default. A deliberate sub-200K cap, or any non-default size,
- * is treated as intentional and left untouched.
- */
-function isKnown1MUnderDefault(stdin: StdinData): boolean {
-  const reported = stdin.context_window?.context_window_size ?? 0;
-  return reported === DEFAULT_FALLBACK_WINDOW && is1MContextModel(stdin.model?.id);
-}
-
-/**
- * Effective context-window size, correcting Claude Code's under-reported window.
- *
- * Two correction paths, both UPWARD-only:
- *   - Proactive: a known-1M model reported at exactly the 200K default -> 1M,
- *     from the first token (fixes the bar before usage crosses 200K).
- *   - Reactive: usage exceeds the reported size (model-agnostic proof the report
- *     is wrong) -> smallest standard tier that fits.
- *
- * Neither path can mask a genuine cap: the proactive path only fires on the
- * exact 200K default for a known-1M family, and the reactive path only fires
- * when the token count itself contradicts the report.
- */
-export function getEffectiveContextWindowSize(stdin: StdinData): number {
-  const reported = stdin.context_window?.context_window_size ?? 0;
-  const used = getTotalTokens(stdin);
-
-  // Proactive: known-1M model that Claude Code fell back to 200K for.
-  if (isKnown1MUnderDefault(stdin)) {
-    return 1_000_000;
+export function getContextPercent(stdin: StdinData, autoCompactWindow?: number | null): number {
+  if (typeof autoCompactWindow === 'number' && autoCompactWindow > 0) {
+    const totalTokens = getTotalTokens(stdin);
+    return Math.min(100, Math.round((totalTokens / autoCompactWindow) * 100));
   }
 
-  if (!isWindowUnderReported(stdin)) {
-    return reported; // reported size is present and consistent with usage
-  }
-  // Reactive: reported size is contradicted by usage — snap up to the smallest
-  // standard tier that actually fits (in practice 1M); if usage somehow exceeds
-  // every known tier, fall back to usage itself so the bar reads an honest 100%.
-  const tier = STANDARD_CONTEXT_WINDOWS.find((w) => w >= used);
-  return tier ?? used;
-}
-
-/**
- * The native `used_percentage` Claude Code sends is derived from its reported
- * context_window_size. When we correct that size (proactively for a known-1M
- * model at the 200K default, or reactively when usage exceeds it), the native
- * percentage is itself wrong — a clamped/inflated value — so we must recompute
- * against the effective size instead of trusting it.
- */
-function shouldOverrideNativePercent(stdin: StdinData): boolean {
-  return isKnown1MUnderDefault(stdin) || isWindowUnderReported(stdin);
-}
-
-export function getContextPercent(stdin: StdinData): number {
-  // Prefer native percentage (v2.1.6+) — accurate and matches /context — UNLESS
-  // it's derived from a context_window_size we've corrected (see above).
-  if (!shouldOverrideNativePercent(stdin)) {
-    const native = getNativePercent(stdin);
-    if (native !== null) {
-      return native;
-    }
+  // Prefer native percentage (v2.1.6+) - accurate and matches /context
+  const native = getNativePercent(stdin);
+  if (native !== null) {
+    return native;
   }
 
-  // Manual calculation against the effective (under-report-corrected) size.
-  const size = getEffectiveContextWindowSize(stdin);
+  // Fallback: manual calculation without buffer
+  const size = stdin.context_window?.context_window_size;
   if (!size || size <= 0) {
     return 0;
   }
@@ -279,18 +192,21 @@ export function getContextPercent(stdin: StdinData): number {
   return Math.min(100, Math.round((totalTokens / size) * 100));
 }
 
-export function getBufferedPercent(stdin: StdinData): number {
-  // Prefer native percentage (v2.1.6+) so the HUD matches Claude Code's own
-  // context output — unless the reported window has been corrected (see above).
-  if (!shouldOverrideNativePercent(stdin)) {
-    const native = getNativePercent(stdin);
-    if (native !== null) {
-      return native;
-    }
+export function getBufferedPercent(stdin: StdinData, autoCompactWindow?: number | null): number {
+  if (typeof autoCompactWindow === 'number' && autoCompactWindow > 0) {
+    const totalTokens = getTotalTokens(stdin);
+    return Math.min(100, Math.round((totalTokens / autoCompactWindow) * 100));
   }
 
-  // Manual calculation with buffer against the effective (corrected) size.
-  const size = getEffectiveContextWindowSize(stdin);
+  // Prefer native percentage (v2.1.6+) so the HUD matches Claude Code's
+  // own context output. The buffered fallback only approximates older versions.
+  const native = getNativePercent(stdin);
+  if (native !== null) {
+    return native;
+  }
+
+  // Fallback: manual calculation with buffer for older Claude Code versions
+  const size = stdin.context_window?.context_window_size;
   if (!size || size <= 0) {
     return 0;
   }
@@ -308,26 +224,17 @@ export function getBufferedPercent(stdin: StdinData): number {
   return Math.min(100, Math.round(((totalTokens + buffer) / size) * 100));
 }
 
-/**
- * Strips redundant context-window size suffixes from model display names.
- *
- * Claude Code may include the context window size in the display name
- * (e.g. "Opus 4.6 (1M context)"), but the HUD already shows context
- * usage via the context bar — so the parenthetical is redundant.
- *
- * Handles common variants:
- *   "Opus 4.6 (1M context)"         → "Opus 4.6"
- *   "Sonnet 4 (200k context)"       → "Sonnet 4"
- *   "Claude 3.5 (with 1M context)"  → "Claude 3.5"
- */
-export function stripContextSuffix(name: string): string {
-  return name.replace(/\s*\([^)]*\bcontext\b[^)]*\)/i, '').trim();
-}
+// Enterprise plan alias → human-readable display name
+const ENTERPRISE_ALIAS_LABELS: Record<string, string> = {
+  opusplan: 'Claude Opus',
+  sonnetplan: 'Claude Sonnet',
+  haikuplan: 'Claude Haiku',
+};
 
 export function getModelName(stdin: StdinData): string {
   const displayName = stdin.model?.display_name?.trim();
   if (displayName) {
-    return stripContextSuffix(displayName);
+    return displayName;
   }
 
   const modelId = stdin.model?.id?.trim();
@@ -335,8 +242,57 @@ export function getModelName(stdin: StdinData): string {
     return 'Unknown';
   }
 
+  // Resolve enterprise plan aliases to readable labels
+  const enterpriseLabel = ENTERPRISE_ALIAS_LABELS[modelId.toLowerCase()];
+  if (enterpriseLabel) {
+    return enterpriseLabel;
+  }
+
   const normalizedBedrockLabel = normalizeBedrockModelLabel(modelId);
   return normalizedBedrockLabel ?? modelId;
+}
+
+/**
+ * Returns true if the model string looks like a Claude/Anthropic model.
+ * Used by the "auto" modelSource heuristic to detect proxy redirects.
+ */
+function isClaudeModel(model?: string): boolean {
+  if (!model) return true; // treat missing as Claude (safe fallback)
+  const lower = model.toLowerCase();
+  return lower.startsWith('claude-') || lower.startsWith('anthropic.');
+}
+
+/**
+ * Resolves the model name to display, respecting `display.modelSource` config.
+ *
+ * - "stdin":      Always use the model from Claude Code's stdin (display_name).
+ * - "transcript": Always use the model from the API response (message.model).
+ *                 Falls back to stdin when transcript has no assistant messages yet.
+ * - "auto": Use stdin for Claude models, transcript for non-Claude.
+ *                      Detects proxy redirects (cc-switch, LiteLLM, etc.) that
+ *                      serve a different model than what Claude Code requested.
+ */
+export function resolveModelName(
+  stdin: StdinData,
+  transcript: TranscriptData | undefined,
+  modelSource: 'auto' | 'stdin' | 'transcript' = 'stdin',
+): string {
+  const stdinModel = getModelName(stdin);
+  // Treat TranscriptData as untrusted at the render boundary too. Callers and
+  // poisoned cache objects can bypass parse-time normalization.
+  const transcriptModel = sanitizeTranscriptModel(transcript?.lastAssistantModel);
+
+  if (modelSource === 'stdin' || !transcriptModel) {
+    return stdinModel;
+  }
+
+  if (modelSource === 'transcript') {
+    return transcriptModel;
+  }
+
+  // auto: prefer transcript only when the API served a non-Claude model
+  // (indicates proxy redirect). Claude models keep stdin for pretty formatting.
+  return isClaudeModel(transcriptModel) ? stdinModel : transcriptModel;
 }
 
 export function isBedrockModelId(modelId?: string): boolean {
@@ -347,11 +303,159 @@ export function isBedrockModelId(modelId?: string): boolean {
   return normalized.includes('anthropic.claude-');
 }
 
+// Vertex AI model IDs use '@' as version separator (e.g. claude-3-5-sonnet@20241022)
+export function isVertexModelId(modelId?: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+  return modelId.includes('@');
+}
+
+const ENTERPRISE_MODEL_IDS = new Set(['opusplan', 'sonnetplan', 'haikuplan']);
+
+export function isEnterpriseModelId(modelId?: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+  return ENTERPRISE_MODEL_IDS.has(modelId.toLowerCase());
+}
+
 export function getProviderLabel(stdin: StdinData): string | null {
-  if (isBedrockModelId(stdin.model?.id)) {
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
     return 'Bedrock';
   }
+  if (process.env.CLAUDE_CODE_USE_VERTEX === '1') {
+    return 'Vertex';
+  }
+  if (isEnterpriseModelId(stdin.model?.id)) {
+    return 'Enterprise';
+  }
   return null;
+}
+
+export function shouldHideUsage(stdin: StdinData): boolean {
+  return getProviderLabel(stdin) === 'Bedrock' || isBedrockModelId(stdin.model?.id);
+}
+
+function parseRateLimitPercent(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.round(Math.min(100, Math.max(0, value)));
+}
+
+function parseRateLimitResetAt(value: number | null | undefined): Date | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return new Date(value * 1000);
+}
+
+export function getUsageFromStdin(stdin: StdinData): UsageData | null {
+  const rateLimits = stdin.rate_limits;
+  if (!rateLimits) {
+    return null;
+  }
+
+  const fiveHour = parseRateLimitPercent(rateLimits.five_hour?.used_percentage);
+  const sevenDay = parseRateLimitPercent(rateLimits.seven_day?.used_percentage);
+  const scopedWindows = parseScopedWindows(rateLimits.model_scoped);
+  if (fiveHour === null && sevenDay === null && scopedWindows.length === 0) {
+    return null;
+  }
+
+  return {
+    fiveHour,
+    sevenDay,
+    fiveHourResetAt: parseRateLimitResetAt(rateLimits.five_hour?.resets_at),
+    sevenDayResetAt: parseRateLimitResetAt(rateLimits.seven_day?.resets_at),
+    ...(scopedWindows.length > 0 && { scopedWindows }),
+  };
+}
+
+/**
+ * Parses `rate_limits.model_scoped` (model-scoped weekly windows, e.g. Fable).
+ * The upstream schema carries `utilization` on the same 0-100 scale used by
+ * the generic rate-limit windows. Malformed entries are dropped, and both the
+ * retained entry count and label size are bounded because stdin is untrusted.
+ */
+function parseScopedWindows(modelScoped: unknown): ScopedUsageWindow[] {
+  if (!Array.isArray(modelScoped)) {
+    return [];
+  }
+  const windows: ScopedUsageWindow[] = [];
+  for (const raw of modelScoped) {
+    if (windows.length >= SCOPED_USAGE_MAX_WINDOWS) {
+      break;
+    }
+    const entry = raw as { display_name?: unknown; utilization?: unknown; resets_at?: unknown } | null;
+    const label = typeof entry?.display_name === 'string'
+      ? sanitizeDisplayText(entry.display_name).trim().slice(0, SCOPED_USAGE_LABEL_MAX_LENGTH)
+      : '';
+    if (!label) {
+      continue;
+    }
+    const utilization = entry?.utilization;
+    const percent = utilization === null
+      ? null
+      : parseRateLimitPercent(utilization as number | undefined);
+    if (utilization !== null && percent === null) {
+      continue;
+    }
+    const resetAtRaw = entry?.resets_at;
+    const resetAt = typeof resetAtRaw === 'string'
+      && resetAtRaw.length <= SCOPED_USAGE_RESET_MAX_LENGTH
+      && !Number.isNaN(Date.parse(resetAtRaw))
+      ? new Date(resetAtRaw)
+      : null;
+    windows.push({
+      label,
+      percent,
+      resetAt,
+    });
+  }
+  return windows;
+}
+
+/**
+ * Strips redundant context-window size suffixes from model display names.
+ *
+ * Claude Code may include the context window size in the display name
+ * (e.g. "Opus 4.6 (1M context)"), but the HUD already shows context
+ * usage via the context bar — so the parenthetical is redundant.
+ */
+export function stripContextSuffix(name: string): string {
+  return name.replace(/\s*\([^)]*\bcontext\b[^)]*\)/i, '').trim();
+}
+
+/**
+ * Formats a model name according to the user's chosen display settings.
+ *
+ * When `override` is set, it replaces the model name entirely.
+ * Otherwise, `format` controls how the raw name is abbreviated:
+ *
+ *   full:    Return raw name unchanged   (e.g. "Opus 4.6 (1M context)")
+ *   compact: Strip context-window suffix (e.g. "Opus 4.6")
+ *   short:   Strip context suffix AND leading "Claude " prefix (e.g. "Opus 4.6")
+ */
+export function formatModelName(name: string, format?: ModelFormatMode, override?: string): string {
+  if (override) {
+    return override;
+  }
+
+  if (!format || format === 'full') {
+    return name;
+  }
+
+  let result = stripContextSuffix(name);
+
+  if (format === 'short') {
+    result = result.replace(/^Claude\s+/i, '');
+  }
+
+  return result;
 }
 
 function normalizeBedrockModelLabel(modelId: string): string | null {

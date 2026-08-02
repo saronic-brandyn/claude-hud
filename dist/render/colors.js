@@ -1,6 +1,5 @@
 export const RESET = '\x1b[0m';
-const DIM_FALLBACK = '\x1b[2m';
-let resolvedDim = DIM_FALLBACK;
+const DIM = '\x1b[2m';
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -10,6 +9,7 @@ const BRIGHT_BLUE = '\x1b[94m';
 const BRIGHT_MAGENTA = '\x1b[95m';
 const CLAUDE_ORANGE = '\x1b[38;5;208m';
 const ANSI_BY_NAME = {
+    dim: DIM,
     red: RED,
     green: GREEN,
     yellow: YELLOW,
@@ -41,12 +41,11 @@ function resolveAnsi(value, fallback) {
     }
     return ANSI_BY_NAME[value] ?? fallback;
 }
-/** Initialize color overrides from config. Call once before rendering. */
-export function initColors(overrides) {
-    resolvedDim = resolveAnsi(overrides?.dim, DIM_FALLBACK);
-}
 function colorize(text, color) {
     return `${color}${text}${RESET}`;
+}
+function withOverride(text, value, fallback) {
+    return colorize(text, resolveAnsi(value, fallback));
 }
 export function green(text) {
     return colorize(text, GREEN);
@@ -64,10 +63,28 @@ export function magenta(text) {
     return colorize(text, MAGENTA);
 }
 export function dim(text) {
-    return colorize(text, resolvedDim);
+    return colorize(text, DIM);
 }
 export function claudeOrange(text) {
     return colorize(text, CLAUDE_ORANGE);
+}
+export function model(text, colors) {
+    return withOverride(text, colors?.model, CYAN);
+}
+export function project(text, colors) {
+    return withOverride(text, colors?.project, YELLOW);
+}
+export function git(text, colors) {
+    return withOverride(text, colors?.git, MAGENTA);
+}
+export function gitBranch(text, colors) {
+    return withOverride(text, colors?.gitBranch, CYAN);
+}
+export function label(text, colors) {
+    return withOverride(text, colors?.label, DIM);
+}
+export function custom(text, colors) {
+    return withOverride(text, colors?.custom, CLAUDE_ORANGE);
 }
 export function warning(text, colors) {
     return colorize(text, resolveAnsi(colors?.warning, YELLOW));
@@ -75,10 +92,12 @@ export function warning(text, colors) {
 export function critical(text, colors) {
     return colorize(text, resolveAnsi(colors?.critical, RED));
 }
-export function getContextColor(percent, colors) {
-    if (percent >= 85)
+export function getContextColor(percent, colors, thresholds) {
+    const critical = thresholds?.critical ?? 85;
+    const warning = thresholds?.warning ?? 70;
+    if (percent >= critical)
         return resolveAnsi(colors?.critical, RED);
-    if (percent >= 70)
+    if (percent >= warning)
         return resolveAnsi(colors?.warning, YELLOW);
     return resolveAnsi(colors?.context, GREEN);
 }
@@ -95,30 +114,18 @@ export function quotaBar(percent, width = 10, colors) {
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
     const color = getQuotaColor(safePercent, colors);
-    return `${color}${'█'.repeat(filled)}${resolvedDim}${'░'.repeat(empty)}${RESET}`;
+    const filledChar = colors?.barFilled ?? '█';
+    const emptyChar = colors?.barEmpty ?? '░';
+    return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
 }
-export function coloredBar(percent, width = 10, colors) {
+export function coloredBar(percent, width = 10, colors, thresholds) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
     const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
-    const color = getContextColor(safePercent, colors);
-    return `${color}${'█'.repeat(filled)}${resolvedDim}${'░'.repeat(empty)}${RESET}`;
-}
-export function quotaBarAscii(percent, width = 10, colors) {
-    const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
-    const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-    const filled = Math.round((safePercent / 100) * safeWidth);
-    const empty = safeWidth - filled;
-    const color = getQuotaColor(safePercent, colors);
-    return `${color}${'#'.repeat(filled)}${resolvedDim}${'-'.repeat(empty)}${RESET}`;
-}
-export function coloredBarAscii(percent, width = 10, colors) {
-    const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
-    const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-    const filled = Math.round((safePercent / 100) * safeWidth);
-    const empty = safeWidth - filled;
-    const color = getContextColor(safePercent, colors);
-    return `${color}${'#'.repeat(filled)}${resolvedDim}${'-'.repeat(empty)}${RESET}`;
+    const color = getContextColor(safePercent, colors, thresholds);
+    const filledChar = colors?.barFilled ?? '█';
+    const emptyChar = colors?.barEmpty ?? '░';
+    return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
 }
 //# sourceMappingURL=colors.js.map

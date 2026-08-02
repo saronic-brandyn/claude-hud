@@ -1,44 +1,58 @@
-import { yellow, green, cyan, dim } from './colors.js';
-/** How long to show completed tools after they finish (ms) */
-const COMPLETED_VISIBLE_MS = 5000;
+import { yellow, green, cyan, label } from './colors.js';
+const ELLIPSIS = '…';
+const MCP_TOOL_NAME_PATTERN = /^mcp__.+__.+$/;
+export function shortenToolName(name, maxLen) {
+    if (maxLen === 0) {
+        return name;
+    }
+    const displayName = MCP_TOOL_NAME_PATTERN.test(name)
+        ? (name.split('__').pop() ?? name)
+        : name;
+    if (displayName.length <= maxLen) {
+        return displayName;
+    }
+    return `${displayName.slice(0, Math.max(0, maxLen - 1))}${ELLIPSIS}`;
+}
 export function renderToolsLine(ctx) {
-    const { tools } = ctx.transcript;
-    const runningTools = tools.filter((t) => t.status === 'running');
-    const now = Date.now();
-    const recentCompleted = tools
-        .filter((t) => t.status === 'completed' && t.endTime && (now - t.endTime.getTime()) < COMPLETED_VISIBLE_MS)
-        .slice(-2);
-    if (runningTools.length === 0 && recentCompleted.length === 0) {
+    const hideSkillTools = ctx.config?.display?.showSkills === true;
+    const tools = hideSkillTools
+        ? ctx.transcript.tools.filter((tool) => tool.name !== 'Skill')
+        : ctx.transcript.tools;
+    const colors = ctx.config?.colors;
+    const toolNameMaxLength = ctx.config?.display?.toolNameMaxLength ?? 0;
+    const toolsMaxVisible = ctx.config?.display?.toolsMaxVisible ?? 4;
+    if (tools.length === 0) {
         return null;
     }
-    const ascii = ctx.config?.display?.asciiMode ?? false;
-    const symRunning = ascii ? '~' : '◐';
-    const symDone = ascii ? '+' : '✓';
     const parts = [];
-    for (const tool of runningTools.slice(-3)) {
+    const runningTools = tools.filter((t) => t.status === 'running');
+    const completedTools = tools.filter((t) => t.status === 'completed' || t.status === 'error');
+    for (const tool of runningTools.slice(-2)) {
         const target = tool.target ? truncatePath(tool.target) : '';
-        const elapsed = now - tool.startTime.getTime();
-        const elapsedStr = elapsed > 5000 ? ` ${dim(`(${formatElapsed(elapsed)})`)}` : '';
-        parts.push(`${yellow(symRunning)} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}${elapsedStr}`);
+        const name = shortenToolName(tool.name, toolNameMaxLength);
+        parts.push(`${yellow('◐')} ${cyan(name)}${target ? label(`: ${target}`, colors) : ''}`);
     }
-    if (runningTools.length > 3) {
-        parts.push(dim(`+${runningTools.length - 3} more`));
+    const toolCounts = new Map();
+    for (const tool of completedTools) {
+        const count = toolCounts.get(tool.name) ?? 0;
+        toolCounts.set(tool.name, count + 1);
     }
-    for (const tool of recentCompleted) {
-        const target = tool.target ? truncatePath(tool.target) : '';
-        parts.push(`${green(symDone)} ${dim(tool.name)}${target ? dim(`: ${target}`) : ''}`);
+    const sortedTools = Array.from(toolCounts.entries())
+        .sort((a, b) => b[1] - a[1]);
+    const visibleTools = toolsMaxVisible === 0
+        ? sortedTools
+        : sortedTools.slice(0, toolsMaxVisible);
+    for (const [name, count] of visibleTools) {
+        parts.push(`${green('✓')} ${shortenToolName(name, toolNameMaxLength)} ${label(`×${count}`, colors)}`);
+    }
+    const hiddenToolCount = toolsMaxVisible === 0 ? 0 : sortedTools.length - visibleTools.length;
+    if (hiddenToolCount > 0) {
+        parts.push(label(`+${hiddenToolCount} more`, colors));
+    }
+    if (parts.length === 0) {
+        return null;
     }
     return parts.join(' | ');
-}
-function formatElapsed(ms) {
-    if (ms < 1000)
-        return '<1s';
-    const secs = Math.round(ms / 1000);
-    if (secs < 60)
-        return `${secs}s`;
-    const mins = Math.floor(secs / 60);
-    const remSecs = secs % 60;
-    return `${mins}m ${remSecs}s`;
 }
 function truncatePath(path, maxLen = 20) {
     // Normalize Windows backslashes to forward slashes for consistent display
