@@ -14,6 +14,7 @@ import { detectBackendProfile } from "./backend.js";
 import { detectCompaction } from "./compaction-detector.js";
 import { getContextVelocity } from "./context-velocity.js";
 import { getQueryCost } from "./query-cost.js";
+import { getActionCosts } from "./action-cost.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
@@ -230,6 +231,15 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     const queryCost = config.display.showQueryCost === true
       ? getQueryCost(stdin.cost?.total_cost_usd ?? undefined, { sessionId: sessionKey })
       : null;
+    const actionCosts = config.display.showCostByAction === true
+      ? getActionCosts(
+          stdin.cost?.total_cost_usd ?? undefined,
+          transcript.tools,
+          transcript.agents,
+          config.display.costByActionThreshold,
+          sessionKey,
+        )
+      : null;
 
     const ctx: RenderContext = {
       stdin,
@@ -253,6 +263,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       compaction,
       contextDelta,
       queryCost,
+      actionCosts,
     };
 
     deps.render(ctx);

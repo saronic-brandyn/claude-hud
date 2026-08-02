@@ -219,6 +219,10 @@ export interface HudConfig {
     showCompactionState: boolean;
     /** Append the current query's cost to the session cost line. */
     showQueryCost: boolean;
+    /** Break the session cost down by tool type. */
+    showCostByAction: boolean;
+    /** Hide action-cost entries below this dollar amount. */
+    costByActionThreshold: number;
     /** Per-tick token delta next to the context percentage. */
     showContextDelta: boolean;
     mergeGroups: HudElement[][];
@@ -328,6 +332,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     showCompactions: false,
     showCompactionState: true,
     showQueryCost: false,
+    showCostByAction: false,
+    costByActionThreshold: 0.01,
     showContextDelta: false,
     mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
     autocompactBuffer: 'enabled',
@@ -818,6 +824,15 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showQueryCost: typeof migrated.display?.showQueryCost === 'boolean'
       ? migrated.display.showQueryCost
       : DEFAULT_CONFIG.display.showQueryCost,
+    showCostByAction: typeof migrated.display?.showCostByAction === 'boolean'
+      ? migrated.display.showCostByAction
+      : DEFAULT_CONFIG.display.showCostByAction,
+    costByActionThreshold:
+      typeof migrated.display?.costByActionThreshold === 'number'
+      && Number.isFinite(migrated.display.costByActionThreshold)
+      && migrated.display.costByActionThreshold >= 0
+        ? migrated.display.costByActionThreshold
+        : DEFAULT_CONFIG.display.costByActionThreshold,
     showContextDelta: typeof migrated.display?.showContextDelta === 'boolean'
       ? migrated.display.showContextDelta
       : DEFAULT_CONFIG.display.showContextDelta,

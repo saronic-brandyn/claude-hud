@@ -4,6 +4,7 @@ import type { AuthInfo } from './auth.js';
 import type { BackendProfile } from './backend.js';
 import type { CompactionEvent } from './compaction-detector.js';
 import type { QueryCostInfo } from './query-cost.js';
+import type { ActionCostEntry } from './action-cost.js';
 
 export interface StdinData {
   transcript_path?: string;
@@ -219,4 +220,10 @@ export interface RenderContext {
    * different questions and only the second has an upstream answer.
    */
   queryCost?: QueryCostInfo | null;
+  /**
+   * Session cost attributed by tool type (see action-cost.ts). Answers
+   * "where is the money going", which neither the session total nor the
+   * per-query figure can.
+   */
+  actionCosts?: ActionCostEntry[] | null;
 }

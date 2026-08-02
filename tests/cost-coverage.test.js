@@ -265,3 +265,34 @@ test('renderCostEstimate is unaffected when queryCost is absent entirely', () =>
   assert.ok(line?.includes('$1.50'));
   assert.ok(!line?.includes('this query'));
 });
+
+test('renderCostEstimate breaks cost down by tool type when enabled', () => {
+  const line = renderCostEstimate(costCtx({
+    actionCosts: [
+      { toolType: 'Agent', totalCost: 4.5 },
+      { toolType: 'Bash', totalCost: 1.2 },
+    ],
+  }));
+  assert.ok(line?.includes('Agent $4.50'), `expected Agent entry, got: ${line}`);
+  assert.ok(line?.includes('Bash $1.20'), `expected Bash entry, got: ${line}`);
+});
+
+test('renderCostEstimate caps the cost breakdown at five tool types', () => {
+  const actionCosts = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((toolType, i) => ({
+    toolType, totalCost: 10 - i,
+  }));
+  const line = renderCostEstimate(costCtx({ actionCosts }));
+  assert.ok(line?.includes('a $10.00'), 'highest-cost entry must render');
+  assert.ok(!line?.includes('f $'), `expected the 6th entry to be dropped, got: ${line}`);
+  assert.ok(!line?.includes('g $'), 'the tail must be dropped');
+});
+
+// Strip ANSI before asserting on punctuation: color codes are themselves
+// `\x1b[2m`, so a bare includes('[') matches the escape, not the breakdown.
+const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+test('renderCostEstimate omits the breakdown when there are no action costs', () => {
+  const line = stripAnsi(renderCostEstimate(costCtx({ actionCosts: [] })) ?? '');
+  assert.ok(line.includes('$1.50'));
+  assert.ok(!line.includes('['), `expected no breakdown bracket, got: ${line}`);
+});
