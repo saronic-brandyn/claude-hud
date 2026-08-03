@@ -340,8 +340,28 @@ describe('parseTranscript', () => {
     assert.equal(result.sessionName, 'Custom Title Wins');
   });
 
-  // 20. handles large transcript within 200ms (performance regression test)
-  test('handles large transcript within 200ms', async () => {
+  // 20. handles a large transcript within its perf budget (regression test)
+  //
+  // The budget guards against an ALGORITHMIC regression on 10k lines, so it
+  // only has to sit outside runner jitter -- it must not hug the current
+  // runtime. The old 200ms value did, and measured on ubuntu-latest/18.x at
+  // commit 68a24fc0 (one commit, three runs) that put it inside the noise:
+  //
+  //   npm test          (build-dist.yml, uninstrumented)  181.3 ms  -> 9% margin
+  //   npm run test:coverage (ci.yml, c8-instrumented)     212.0 ms  -> FAILED
+  //   npm run test:coverage, previous commit              199.97 ms -> 0.017% margin
+  //
+  // c8 instrumentation costs ~17% (212/181), which is why ci.yml went red while
+  // build-dist.yml stayed green on the very same commit. But instrumentation is
+  // not the whole story: 181ms against a 200ms line is a coin flip on its own,
+  // so gating the assertion on coverage would have left the flake in place.
+  //
+  // 500ms is 2.4x the worst observed, so jitter and instrumentation both fit
+  // under it, while an O(n^2) regression here costs seconds and still trips it.
+  // Sibling precedent: extra-cmd.test.js allows 1000ms for a ~100ms timeout.
+  const PERF_BUDGET_MS = 500;
+
+  test('handles a large transcript within its perf budget', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-transcript-'));
     const file = path.join(dir, 'large.jsonl');
     const lines = [];
@@ -360,7 +380,14 @@ describe('parseTranscript', () => {
       const start = Date.now();
       const result = await parseTranscript(file);
       const elapsed = Date.now() - start;
-      assert.ok(elapsed < 200, `took ${elapsed}ms, expected <200ms`);
+      // Report whether coverage was active: a bare elapsed number sends the
+      // next reader hunting a perf regression that is really instrumentation.
+      const instrumented = Boolean(process.env.NODE_V8_COVERAGE);
+      assert.ok(
+        elapsed < PERF_BUDGET_MS,
+        `took ${elapsed}ms, expected <${PERF_BUDGET_MS}ms `
+          + `(coverage instrumentation: ${instrumented ? 'on' : 'off'})`,
+      );
       assert.strictEqual(result.tools.length, 20);
       assert.ok(result.sessionStart instanceof Date);
     } finally {
