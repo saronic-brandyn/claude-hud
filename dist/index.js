@@ -150,17 +150,32 @@ export async function main(overrides = {}) {
         const authInfo = config.display.showAuth || config.display.showAuthUser
             ? deps.readAuthInfo()
             : null;
-        // Launch-profile detection. Bedrock/GovCloud are resolved purely from
-        // stdin + env, so they work regardless of auth state. The subscription-vs-
-        // workspace split needs an auth signal, which is only on hand when the auth
-        // display is enabled; absent it, detectBackendProfile returns `unknown` and
-        // the renderer falls back to upstream's provider label. That is deliberate —
-        // ANTHROPIC_API_KEY is scrubbed from the status-line subprocess, so guessing
-        // would mislabel rather than degrade.
-        const backendProfile = detectBackendProfile(stdin, {
-            hasSubscription: !!authInfo?.method && authInfo.method !== "API Key",
-            hasApiKey: authInfo?.method === "API Key",
-        });
+        // Launch-profile detection, resolved in two passes so that a DISPLAY toggle
+        // never governs a DETECTION input.
+        //
+        // Pass 1 needs no auth at all: an explicit CLAUDE_HUD_PROFILE override, and
+        // Bedrock/GovCloud, are decidable from stdin + env alone. Most sessions end
+        // here and pay no extra I/O.
+        //
+        // Pass 2 runs ONLY when pass 1 is `unknown` — the non-Bedrock case, where
+        // separating a subscription from a workspace key needs an auth signal. It
+        // reuses authInfo when the auth display already loaded it, and otherwise
+        // reads it on purpose. Previously this input was taken from the
+        // showAuth/showAuthUser display flags, so turning the auth text OFF also
+        // silently disabled profile detection — a surprising coupling with no
+        // indication of why the label vanished.
+        //
+        // ANTHROPIC_API_KEY is scrubbed from the status-line subprocess, so when
+        // neither signal is present detectBackendProfile still returns `unknown`
+        // and the renderer falls back to the provider label rather than guessing.
+        let backendProfile = detectBackendProfile(stdin);
+        if (backendProfile === "unknown") {
+            const profileAuth = authInfo ?? deps.readAuthInfo();
+            backendProfile = detectBackendProfile(stdin, {
+                hasSubscription: !!profileAuth?.method && profileAuth.method !== "API Key",
+                hasApiKey: profileAuth?.method === "API Key",
+            });
+        }
         // Compaction state and token velocity are both derived by comparing this
         // tick against the previous one, so they are stateful across invocations
         // (FileCache) and must be computed exactly once per run.
