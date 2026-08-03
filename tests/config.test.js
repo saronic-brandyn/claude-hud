@@ -498,6 +498,59 @@ test('loadConfig reads user config from CLAUDE_CONFIG_DIR', async () => {
   }
 });
 
+// Validation rebuilds `display` as an explicit whitelist, so a key with no
+// validation branch is silently DROPPED rather than rejected. For a default-on
+// flag that failure is invisible and inverted: the user's `false` disappears,
+// the renderer's `!== false` reads undefined as true, and the warning they
+// switched off comes back. Assert the round-trip, not just the default.
+test('loadConfig round-trips showMcpErrors:false from the user config', async () => {
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  const customConfigDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-mcp-errors-'));
+
+  try {
+    process.env.CLAUDE_CONFIG_DIR = customConfigDir;
+    const pluginDir = path.join(customConfigDir, 'plugins', 'claude-hud');
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      path.join(pluginDir, 'config.json'),
+      JSON.stringify({ display: { showMcpErrors: false } }),
+      'utf8'
+    );
+
+    const config = await loadConfig();
+    assert.equal(
+      config.display.showMcpErrors,
+      false,
+      'user opt-out must survive validation, not be dropped to undefined',
+    );
+  } finally {
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(customConfigDir, { recursive: true, force: true });
+  }
+});
+
+test('loadConfig defaults showMcpErrors to true when the user config omits it', async () => {
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  const customConfigDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-mcp-errors-default-'));
+
+  try {
+    process.env.CLAUDE_CONFIG_DIR = customConfigDir;
+    const pluginDir = path.join(customConfigDir, 'plugins', 'claude-hud');
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      path.join(pluginDir, 'config.json'),
+      JSON.stringify({ display: { showSpeed: true } }),
+      'utf8'
+    );
+
+    const config = await loadConfig();
+    assert.equal(config.display.showMcpErrors, true, 'absent flag must default on');
+  } finally {
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(customConfigDir, { recursive: true, force: true });
+  }
+});
+
 test('mergeConfig accepts pathLevels: "full"', () => {
   const config = mergeConfig({ pathLevels: 'full' });
   assert.equal(config.pathLevels, 'full');

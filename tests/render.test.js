@@ -1168,6 +1168,49 @@ test('renderEnvironmentLine surfaces MCP errors even when config counts are off'
   assert.ok(!line.includes('5 MCPs'), 'counts stay suppressed; only the fault shows');
 });
 
+// The escape hatch for a server that errors chronically for a known reason:
+// a permanent warning is indistinguishable from wallpaper, so it must be
+// switchable off — but only by the toggle that actually means it.
+test('renderEnvironmentLine suppresses the MCP-error bypass when showMcpErrors is false', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = false;
+  ctx.config.display.showMcpErrors = false;
+  ctx.mcpCount = 5;
+  ctx.transcript.mcpErrors = ['slack-user'];
+
+  assert.equal(
+    renderEnvironmentLine(ctx),
+    null,
+    'showMcpErrors=false must leave no line at all when counts are also off',
+  );
+});
+
+test('renderEnvironmentLine keeps counts but drops the error segment when showMcpErrors is false', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = true;
+  ctx.config.display.showMcpErrors = false;
+  ctx.mcpCount = 5;
+  ctx.transcript.mcpErrors = ['slack-user'];
+
+  const line = renderEnvironmentLine(ctx);
+  assert.ok(line?.includes('5 MCPs'), `counts should still render, got: ${line}`);
+  assert.ok(!line.includes('slack-user'), `error name must be gone, got: ${line}`);
+  assert.ok(!line.includes('⚠'), `warning glyph must be gone, got: ${line}`);
+});
+
+// Default-on: an absent flag must behave exactly like an explicit true, or
+// every existing config silently loses its fault indicator on upgrade.
+test('renderEnvironmentLine treats missing showMcpErrors as enabled', () => {
+  const ctx = baseContext();
+  ctx.config.display.showConfigCounts = false;
+  delete ctx.config.display.showMcpErrors;
+  ctx.mcpCount = 5;
+  ctx.transcript.mcpErrors = ['slack-user'];
+
+  const line = renderEnvironmentLine(ctx);
+  assert.ok(line?.includes('slack-user'), `expected the fault to show, got: ${line}`);
+});
+
 test('renderEnvironmentLine stays null when nothing is enabled and no MCP errors', () => {
   const ctx = baseContext();
   ctx.config.display.showConfigCounts = false;
