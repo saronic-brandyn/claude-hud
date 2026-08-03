@@ -191,6 +191,15 @@ export interface HudConfig {
     showTools: boolean;
     showSkills: boolean;
     showMcp: boolean;
+    /**
+     * Surface MCP servers that returned a tool error this session on the
+     * environment line (`⚠ slack-user`). On by default, and deliberately
+     * independent of `showConfigCounts` — a live fault should not be hidden
+     * behind an unrelated toggle. Set false when a server errors chronically
+     * for a known reason (an expiring OAuth token, say), so the permanent
+     * warning does not train you to ignore the indicator.
+     */
+    showMcpErrors: boolean;
     toolNameMaxLength: number;
     toolsMaxVisible: number;
     showAgents: boolean;
@@ -312,6 +321,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showTools: false,
     showSkills: false,
     showMcp: false,
+    showMcpErrors: true,
     toolNameMaxLength: 0,
     toolsMaxVisible: 4,
     showAgents: false,
@@ -760,6 +770,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showMcp: typeof migrated.display?.showMcp === 'boolean'
       ? migrated.display.showMcp
       : DEFAULT_CONFIG.display.showMcp,
+    showMcpErrors: typeof migrated.display?.showMcpErrors === 'boolean'
+      ? migrated.display.showMcpErrors
+      : DEFAULT_CONFIG.display.showMcpErrors,
     toolNameMaxLength: validateNonNegativeInteger(
       migrated.display?.toolNameMaxLength,
       DEFAULT_CONFIG.display.toolNameMaxLength,
