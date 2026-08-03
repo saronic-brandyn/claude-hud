@@ -775,7 +775,21 @@ test("main reads auth info only when an auth segment is enabled", async () => {
   assert.deepEqual(renderedContext?.authInfo, { method: "API Key", user: null });
 });
 
-test("main skips auth file I/O when auth segments are disabled", async () => {
+// RE-SPECIFIED (was: "main skips auth file I/O when auth segments are disabled",
+// asserting lookupCalls === 0).
+//
+// The original contract coupled two separate things: whether auth is RENDERED,
+// and whether auth is READABLE as a detection input. Launch-profile detection
+// needs the second, so gating it on the display flags meant turning the auth
+// text off silently disabled the profile label.
+//
+// The cost that justified the old gate is addressed at the source instead:
+// readAuthInfo now caches the two derived fields against claude.json's
+// (mtime, size), so the steady-state cost is a stat plus a ~100-byte read
+// rather than a 73 KB parse (measured on a real host). The property still
+// worth asserting is that auth is not RENDERED when disabled — plus the
+// zero-read cases below, which are the ones that actually cost I/O.
+test("auth is not RENDERED when its display segments are disabled", async () => {
   let renderedContext;
   let lookupCalls = 0;
 
@@ -796,6 +810,110 @@ test("main skips auth file I/O when auth segments are disabled", async () => {
     },
   });
 
-  assert.equal(lookupCalls, 0);
-  assert.equal(renderedContext?.authInfo, null);
+  assert.equal(renderedContext?.authInfo, null,
+    "auth must not reach the renderer when its display flags are off");
+  assert.ok(lookupCalls <= 1,
+    "detection may read auth once for its own purposes, but never repeatedly");
+});
+
+// --- backend profile detection must not depend on the auth DISPLAY flags ---
+// Regression: detection previously took its auth signal from
+// showAuth/showAuthUser, so turning the auth TEXT off silently disabled
+// profile detection with no indication of why the label vanished.
+
+function captureProfileDeps({ config, stdin, authInfo = { method: "Claude Enterprise", user: "b@x" } }) {
+  const seen = { authReads: 0, ctx: null };
+  return {
+    deps: {
+      readStdin: async () => stdin,
+      parseTranscript: async () => ({ tools: [], skills: [], mcpServers: [], mcpErrors: [], agents: [], todos: [] }),
+      countConfigs: async () => ({ claudeMdCount: 0, rulesCount: 0, mcpCount: 0, hooksCount: 0, outputStyle: undefined }),
+      loadConfig: async () => config,
+      getGitStatus: async () => null,
+      getJjStatus: async () => null,
+      isJjRepo: () => false,
+      getUsageFromStdin: () => null,
+      getUsageFromExternalSnapshot: () => null,
+      writeExternalUsageSnapshot: () => {},
+      applyContextWindowFallback: () => {},
+      parseExtraCmdArg: () => null,
+      runExtraCmd: async () => null,
+      getClaudeCodeVersion: async () => undefined,
+      getMemoryUsage: async () => null,
+      readAuthInfo: () => { seen.authReads += 1; return authInfo; },
+      render: (ctx) => { seen.ctx = ctx; },
+      now: () => 1_700_000_000_000,
+      log: () => {},
+    },
+    seen,
+  };
+}
+
+test("backend profile resolves with the auth display OFF", async () => {
+  const { deps, seen } = captureProfileDeps({
+    config: makeConfig({ display: { showAuth: false, showAuthUser: false } }),
+    stdin: makeStdin({ model: { id: "claude-opus-5", display_name: "Opus 4.5" } }),
+  });
+
+  await main(deps);
+
+  assert.equal(seen.ctx?.backendProfile, "claude",
+    "profile must resolve even though the auth text is disabled");
+  assert.equal(seen.ctx?.authInfo, null, "auth must NOT be rendered when disabled");
+  assert.equal(seen.authReads, 1, "detection reads auth on its own behalf");
+});
+
+test("a Bedrock session resolves its profile with ZERO auth reads", async () => {
+  const { deps, seen } = captureProfileDeps({
+    config: makeConfig({ display: { showAuth: false, showAuthUser: false } }),
+    stdin: makeStdin({ model: { id: "us.anthropic.claude-opus-4-5-v1:0", display_name: "Opus 4.5" } }),
+  });
+
+  await main(deps);
+
+  assert.equal(seen.ctx?.backendProfile, "claude-bedrock");
+  assert.equal(seen.authReads, 0,
+    "Bedrock is decidable from stdin+env; it must not pay for a config-file read");
+});
+
+test("a GovCloud session resolves its profile with ZERO auth reads", async () => {
+  const { deps, seen } = captureProfileDeps({
+    config: makeConfig({ display: { showAuth: false, showAuthUser: false } }),
+    stdin: makeStdin({ model: { id: "us-gov.anthropic.claude-opus-4-5-v1:0", display_name: "Opus 4.5" } }),
+  });
+
+  await main(deps);
+
+  assert.equal(seen.ctx?.backendProfile, "claude-gov");
+  assert.equal(seen.authReads, 0);
+});
+
+test("auth is read ONCE when the display already loaded it", async () => {
+  const { deps, seen } = captureProfileDeps({
+    config: makeConfig({ display: { showAuth: true, showAuthUser: false } }),
+    stdin: makeStdin({ model: { id: "claude-opus-5", display_name: "Opus 4.5" } }),
+  });
+
+  await main(deps);
+
+  assert.equal(seen.ctx?.backendProfile, "claude");
+  assert.equal(seen.authReads, 1, "detection must REUSE the display's authInfo, not re-read");
+});
+
+test("CLAUDE_HUD_PROFILE override needs no auth read at all", async () => {
+  const prev = process.env.CLAUDE_HUD_PROFILE;
+  process.env.CLAUDE_HUD_PROFILE = "claude-ws";
+  try {
+    const { deps, seen } = captureProfileDeps({
+      config: makeConfig({ display: { showAuth: false, showAuthUser: false } }),
+      stdin: makeStdin({ model: { id: "claude-opus-5", display_name: "Opus 4.5" } }),
+    });
+
+    await main(deps);
+
+    assert.equal(seen.ctx?.backendProfile, "claude-ws");
+    assert.equal(seen.authReads, 0, "an explicit override short-circuits before any I/O");
+  } finally {
+    restoreEnvVar("CLAUDE_HUD_PROFILE", prev);
+  }
 });

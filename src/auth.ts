@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { getClaudeConfigJsonPath } from './claude-config-dir.js';
 import { sanitizeDisplayText } from './utils/sanitize.js';
+import { FileCache } from './file-cache.js';
 
 /**
  * Authentication info for the current Claude Code login, derived from the
@@ -97,17 +98,68 @@ export function deriveAuthInfo(claudeJson: unknown, env: NodeJS.ProcessEnv = pro
   return { method, user };
 }
 
-/** Reads auth info for the current login. Never throws. */
+interface AuthCacheEntry {
+  /** mtimeMs of the claude.json this entry was derived from. */
+  mtimeMs: number;
+  /** Size in bytes, so a same-millisecond rewrite of different length still busts. */
+  size: number;
+  method: string | null;
+  user: string | null;
+}
+
+const authCache = new FileCache<AuthCacheEntry>({
+  name: 'auth-cache',
+  validate: (d): d is AuthCacheEntry =>
+    d != null && typeof d === 'object'
+    && typeof (d as AuthCacheEntry).mtimeMs === 'number'
+    && typeof (d as AuthCacheEntry).size === 'number',
+});
+
+/**
+ * Reads auth info for the current login. Never throws.
+ *
+ * claude.json is the user's whole CLI config — 73 KB on a real host, and it
+ * grows with project history. The status line runs on every interaction, so
+ * parsing it per tick is not free. Instead the DERIVED two fields are cached
+ * and invalidated on (mtimeMs, size), turning the steady-state cost into a
+ * stat plus a ~100-byte read.
+ *
+ * This matters beyond performance: it is what lets launch-profile detection
+ * read auth unconditionally in index.ts, instead of taking its signal from the
+ * showAuth/showAuthUser DISPLAY flags. A display toggle should never decide
+ * whether a detection input is available.
+ */
 export function readAuthInfo(): AuthInfo {
   // Avoid reading a stale OAuth profile when the active source is an API key.
   if (hasApiKey(process.env)) {
     return API_KEY_AUTH_INFO;
   }
 
+  const homeDir = os.homedir();
+  const configJsonPath = getClaudeConfigJsonPath(homeDir);
+
+  let stat: fs.Stats;
   try {
-    const configJsonPath = getClaudeConfigJsonPath(os.homedir());
+    stat = fs.statSync(configJsonPath);
+  } catch {
+    return EMPTY_AUTH_INFO;
+  }
+
+  const cached = authCache.read(homeDir);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return { method: cached.method, user: cached.user };
+  }
+
+  try {
     const content = fs.readFileSync(configJsonPath, 'utf-8');
-    return deriveAuthInfo(JSON.parse(content));
+    const info = deriveAuthInfo(JSON.parse(content));
+    authCache.write(homeDir, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      method: info.method,
+      user: info.user,
+    });
+    return info;
   } catch {
     return EMPTY_AUTH_INFO;
   }
