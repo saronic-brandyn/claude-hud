@@ -8,7 +8,12 @@ export function renderEnvironmentLine(ctx) {
     const threshold = display?.environmentThreshold ?? 0;
     const showCounts = display?.showConfigCounts === true;
     const showOutputStyle = display?.showOutputStyle === true;
-    const mcpErrors = ctx.transcript?.mcpErrors ?? [];
+    // Default-on, so `!== false` rather than the `=== true` the opt-in toggles
+    // above use. Gated once at the source: both the count-suffix form and the
+    // standalone bypass below read this, so the flag cannot be honoured in one
+    // place and leak in the other.
+    const showMcpErrors = display?.showMcpErrors !== false;
+    const mcpErrors = showMcpErrors ? (ctx.transcript?.mcpErrors ?? []) : [];
     const parts = [];
     let renderedMcpCount = false;
     if (showCounts && totalCounts >= threshold && totalCounts > 0) {
@@ -33,8 +38,9 @@ export function renderEnvironmentLine(ctx) {
     }
     // A failing MCP server bypasses the config-count gate. The counts are
     // ambient detail you switch off once you have read them; an erroring server
-    // is a live fault, and hiding it behind an unrelated display toggle is how
-    // a broken tool goes unnoticed for a whole session.
+    // is a live fault, and hiding it behind an *unrelated* display toggle is how
+    // a broken tool goes unnoticed for a whole session. `showMcpErrors` is the
+    // one related toggle, so it does gate this (see the flag's doc comment).
     if (mcpErrors.length > 0 && !renderedMcpCount) {
         parts.push(formatMcpErrors(mcpErrors));
     }

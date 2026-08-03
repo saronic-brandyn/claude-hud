@@ -105,6 +105,15 @@ export interface HudConfig {
         showTools: boolean;
         showSkills: boolean;
         showMcp: boolean;
+        /**
+         * Surface MCP servers that returned a tool error this session on the
+         * environment line (`⚠ slack-user`). On by default, and deliberately
+         * independent of `showConfigCounts` — a live fault should not be hidden
+         * behind an unrelated toggle. Set false when a server errors chronically
+         * for a known reason (an expiring OAuth token, say), so the permanent
+         * warning does not train you to ignore the indicator.
+         */
+        showMcpErrors: boolean;
         toolNameMaxLength: number;
         toolsMaxVisible: number;
         showAgents: boolean;
